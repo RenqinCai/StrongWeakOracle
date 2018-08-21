@@ -29,7 +29,8 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-modelName = "activeLearning_offline_400_2_2"
+dataName = "kitchen"
+modelName = "activeLearning_offline_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -170,10 +171,10 @@ class active_learning:
 
 		for foldIndex in range(foldNum):
 			
-			self.m_clf = LinearSVC(random_state=3)
+			# self.m_clf = LinearSVC(random_state=3)
 			# self.m_clf = LR(fit_intercept=False)
 
-			# self.m_clf = LR(random_state=3, fit_intercept=False)
+			self.m_clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -191,7 +192,7 @@ class active_learning:
 			label_test = self.label[test]
 
 			sampledTrainNum = len(train)
-
+			# sampledTrainNum = 100
 			train_sampled = random.sample(train, sampledTrainNum)
 
 			fn_train = self.fn[train_sampled]
@@ -389,7 +390,7 @@ if __name__ == "__main__":
 	# letterAMCSV = "../letterO.csv"
 	# featureMatrix, labelArray = readFeatureLabelCSV(letterAMCSV)
 	# featureLabelFile = "./kitchenReview"
-	featureLabelFile = "./data/electronicsBOW.txt"
+	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
 
 	# featureLabelFile = "./data/cellPhonesBOW.txt"
 

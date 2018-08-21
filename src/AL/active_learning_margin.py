@@ -29,7 +29,9 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-modelName = "activeLearning_margin_kitchen"
+dataName = "kitchen"
+
+modelName = "activeLearning_margin_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -343,8 +345,8 @@ if __name__ == "__main__":
 	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
 
 	# featureLabelFile = "../data/kitchenReview_2"
-	featureLabelFile = "../data/electronicsBOW.txt"
-
+	# featureLabelFile = "../data/electronicsBOW.txt"
+	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
 
 	f = open(featureLabelFile)
 
@@ -364,17 +366,9 @@ if __name__ == "__main__":
 		label.append(labelVal)
 	f.close()
 
-	# letterAMCSV = "../letterO.csv"
-	# featureMatrix, label = readFeatureLabelCSV(letterAMCSV)
-
-	# specificClass = 2
-	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+"_"+str(specificClass)+".txt"	
-	# transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
-	# transferLabelArray = np.array(transferLabelList)
-	# labelArray = np.array(targetLabelList)
 
 	fold = 10
-	rounds = 1800
+	rounds = 100
 	al = active_learning(fold, rounds, featureMatrix, label)
 
 	al.run_CV()

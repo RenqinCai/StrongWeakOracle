@@ -1,5 +1,5 @@
 """
-active learning with random initialization and least confidence query strategy
+
 """
 
 import numpy as np
@@ -276,51 +276,6 @@ def readFeatureLabelCSV(csvFile):
 
 if __name__ == "__main__":
 
-
-	# featureLabelFile = "./simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
-	# # featureLabelFile = "./kitchenReview"
-	# featureDim = 2
-	# sampleNum = 400
-	# classifierNum = 2
-
-	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
-
-	# f = open(featureLabelFile)
-
-	# # sampleNum = 500
-	# # featureLabelFile = "./simulatedFeatureLabel_"+str(sampleNum)+".txt"
-	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
-	# featureMatrix = np.array(featureMatrix)
-	# labelArray = np.array(labelList)
-
-	# specificClass = 2
-	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+"_"+str(specificClass)+".txt"	
-	# auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
-	# transferLabelArray = np.array(transferLabelList)
-	# labelArray = np.array(targetLabelList)
-
-	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+".txt"
-	# transferLabelList, auditorLabelList = readTransferLabel(transferLabelFile)
-	# transferLabelArray = np.array(transferLabelList)
-	# print(labelList)
-	# auditorLabel = (labelArray==transferLabelArray)*1.0
-	# auditorLabelArray = np.array(auditorLabelList)
-	# print(auditorLabel)
-	# exit()
-	# label = np.array([float(i.strip()) for i in open('targetAuditorLabel.txt').readlines()])
-
-	# tmp = np.genfromtxt('../../data/rice_hour_sdh', delimiter=',')
-	# label = tmp[:,-1]
-	# print("count of auditor", ct(auditorLabelArray))
-	# exit()
-	# mapping = {1:'co2',2:'humidity',4:'rmt',5:'status',6:'stpt',7:'flow',8:'HW sup',9:'HW ret',10:'CW sup',11:'CW ret',12:'SAT',13:'RAT',17:'MAT',18:'C enter',19:'C leave',21:'occu'}
-
-	# fn = get_name_features(raw_pt)
-
-	# letterAMCSV = "../letterO.csv"
-	# featureMatrix, labelArray = readFeatureLabelCSV(letterAMCSV)
-	# featureLabelFile = "./kitchenReview"
-	# featureLabelFile = "./data/electronicsBOW.txt"
 
 	sourceFeatureLabelFile = "./data/cellPhonesBOW.txt"
 	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)

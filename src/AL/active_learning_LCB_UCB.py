@@ -30,7 +30,8 @@ from sklearn.preprocessing import normalize
 from datetime import datetime
 
 dataName = "kitchen"
-modelName = "activeLearning_random_"+dataName
+
+modelName = "activeLearning_LUCB_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -73,41 +74,84 @@ class active_learning:
 		self.m_selectA = 0
 		self.m_selectAInv = 0
 		self.m_selectCbRate = 0.002 ###0.005
-		self.clf = 0
+		self.m_clf = 0
 
 	def select_example(self, unlabeled_list):
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
-
-		# selectedID = unlabeled_list[0]
-		
-		selectedID = random.sample(unlabeled_list, 1)[0]
-
-		return selectedID
-
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
-			labelPredictProb = self.clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+			# print("unlabeledId\t", unlabeledId)
+			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+
+			labelIndexMap = {} ##labelIndex: labelProb
+			labelNum = len(labelPredictProb)
+			for labelIndex in range(labelNum):
+				labelIndexMap.setdefault(labelIndex, labelPredictProb[labelIndex])
+
+			sortedLabelIndexList = sorted(labelIndexMap, key=labelIndexMap.__getitem__, reverse=True)
+
+			maxLabelIndex = sortedLabelIndexList[0]
+			subMaxLabelIndex = sortedLabelIndexList[1]
 
 			selectCB = self.get_select_confidence_bound(unlabeledId)
-			
-			idScore = selectCB
-			unlabeledIdScoreMap[unlabeledId] = idScore
 
+			coefDiff = 0
+			# if labelNum == 2:
+			# 	# coefDiff = np.dot(self.clf.coef_, self.fn[unlabeledId])
+			# 	print("error")
+			# 	print(debug)
+			# else:
+			# 	# coefDiff = np.dot(self.m_clf.coef_, self.fn[unlabeledId])
+			# 	maxCoef = self.m_clf.coef_[maxLabelIndex]
+			# 	subMaxCoef = self.m_clf.coef_[subMaxLabelIndex]
+			# 	coefDiff = np.dot(maxCoef, self.fn[unlabeledId])-np.dot(subMaxCoef, self.fn[unlabeledId])
+
+			coefDiff = np.dot(self.m_clf.coef_, self.fn[unlabeledId])
+
+			LCB = np.abs(coefDiff)-2*0.002*selectCB
+			idScore = 1-LCB
+			unlabeledIdScoreMap[unlabeledId] = idScore
+			# print("unlabeledId", unlabeledId, idScore)
+
+		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
+		# sortedUnlabeledIdList2 = sorted(unlabeledIDScoreMap2, key=unlabeledIDScoreMap2.__getitem__, reverse=True)
+
+		# for unlabeledIdIndex in range(unlabeledIdNum):
+		# 	unlabeledId = sortedUnlabeledIdList[unlabeledIdIndex]
+		# 	unlabeledId2 = sortedUnlabeledIdList2[unlabeledIdIndex]
+
+		# 	print(sortedUnlabeledIdList[unlabeledIdIndex], unlabeledIdScoreMap[unlabeledId], sortedUnlabeledIdList2[unlabeledIdIndex], unlabeledIDScoreMap2[unlabeledId2])
+
 		return sortedUnlabeledIdList[0]
+
+	def init_confidence_bound(self, featureDim):
+		self.m_selectA = self.m_lambda*np.identity(featureDim)
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def update_select_confidence_bound(self, exId):
+		# print("updating select cb", exId)
+		self.m_selectA += np.outer(self.fn[exId], self.fn[exId])
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def get_select_confidence_bound(self, exId):
+		CB = np.sqrt(np.dot(np.dot(self.fn[exId], self.m_selectAInv), self.fn[exId]))
+
+		return CB
 
 	def get_pred_acc(self, fn_test, label_test, labeled_list):
 
 		fn_train = self.fn[labeled_list]
 		label_train = self.label[labeled_list]
 		
-		self.clf.fit(fn_train, label_train)
-		fn_preds = self.clf.predict(fn_test)
+		self.m_clf.fit(fn_train, label_train)
+		fn_preds = self.m_clf.predict(fn_test)
 
 		acc = accuracy_score(label_test, fn_preds)
-	
+		# print("acc\t", acc)
+		# print debug
 		return acc
 
 	def pretrainSelectInit(self, train):
@@ -169,6 +213,7 @@ class active_learning:
 		indexList = [i for i in range(totalInstanceNum)]
 
 		totalTransferNumList = []
+		# np.random.seed(3)
 		random.shuffle(indexList)
 
 		foldNum = 10
@@ -181,13 +226,14 @@ class active_learning:
 
 		foldIndexInstanceList = indexList[foldInstanceNum*(foldNum-1):]
 		foldInstanceList.append(foldIndexInstanceList)
-
+		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		cvIter = 0
 		totalAccList = [[] for i in range(10)]
+		totalNewClassFlagList = [[] for i in range(10)]
 		for foldIndex in range(foldNum):
 			# self.clf = LinearSVC(random_state=3)
-			# self.clf = LR(fit_intercept=False)
-			self.clf = LR(multi_class="multinomial", solver='lbfgs')
+
+			self.m_clf = LR(multi_class="multinomial", solver='lbfgs', fit_intercept=False)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -201,19 +247,30 @@ class active_learning:
 			
 			fn_test = self.fn[test]
 			label_test = self.label[test]
-			print("testing", ct(label_test))
 
 			fn_train = self.fn[train]
+
+			featureDim = len(fn_train[0])
+			self.init_confidence_bound(featureDim)
 			
 			initExList = []
+			# initExList = [234, 366, 183]
 			initExList = self.pretrainSelectInit(train)
-			# initExList = [316, 68, 495]
-			
-			# random.seed(110)
+			# initExList = [325, 287, 422]
+			# random.seed(101)
 			# initExList = random.sample(train, 3)
 			fn_init = self.fn[initExList]
 			label_init = self.label[initExList]
 
+			newClassFlagList = []
+			existClassList = []
+
+			for newLabel in label_init:
+				if newLabel not in existClassList:
+					existClassList.append(newLabel)
+					newClassFlagList.append(1)
+				else:
+					newClassFlagList.append(0)
 
 			print("initExList\t", initExList, label_init)
 			queryIter = 3
@@ -230,12 +287,19 @@ class active_learning:
 				fn_train_iter = self.fn[labeledExList]
 				label_train_iter = self.label[labeledExList]
 
-				self.clf.fit(fn_train_iter, label_train_iter) 
+				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
+				self.update_select_confidence_bound(idx)
 				# print(queryIter, "idx", idx, self.label[idx])
 				# self.update_select_confidence_bound(idx)
-			
+
+				newLabel = self.label[idx]
+				if newLabel not in existClassList:
+					existClassList.append(newLabel)
+					newClassFlagList.append(1)
+				else:
+					newClassFlagList.append(0)
 
 				labeledExList.append(idx)
 				unlabeledExList.remove(idx)
@@ -244,6 +308,7 @@ class active_learning:
 				totalAccList[cvIter].append(acc)
 				queryIter += 1
 
+			totalNewClassFlagList[cvIter] = newClassFlagList
 			cvIter += 1      
 			
 		totalACCFile = modelVersion+"_acc.txt"
@@ -252,6 +317,15 @@ class active_learning:
 			totalAlNum = len(totalAccList[i])
 			for j in range(totalAlNum):
 				f.write(str(totalAccList[i][j])+"\t")
+			f.write("\n")
+		f.close()
+
+		newClassFlagFile = modelVersion+"_newClassFlag.txt"
+		f = open(newClassFlagFile, "w")
+		for i in range(10):
+			totalAlNum = len(totalNewClassFlagList[i])
+			for j in range(totalAlNum):
+				f.write(str(totalNewClassFlagList[i][j])+"\t")
 			f.write("\n")
 		f.close()
 
@@ -278,61 +352,31 @@ def readTransferLabel(transferLabelFile):
 
 	return transferLabelList, targetLabelList
 
-def readFeatureLabelCSV(csvFile):
-    f = open(csvFile)
-
-    firstLine = False
-
-    featureMatrix = []
-    label = []
-
-    firstLine = f.readline()
-    
-    posFeatureMatrix = []
-    posLabel = []
-    negFeatureMatrix = []
-    negLabel = []
-
-    for rawLine in f:
-        line = rawLine.strip().split(",")
-        lineLen = len(line)
-
-        featureList = []
-        for lineIndex in range(lineLen-1):
-            featureVal = float(line[lineIndex])
-            featureList.append(featureVal)
-
-#         featureMatrix.append(featureList)
-        if line[lineLen-1] == "FALSE":
-            negFeatureMatrix.append(featureList)
-            negLabel.append(0.0)
-        else:
-            posFeatureMatrix.append(featureList)
-            # print(line[lineLen-1])
-            posLabel.append(1.0)
-    
-    negFeatureMatrix = random.sample(negFeatureMatrix, len(posLabel))
-    negLabel = random.sample(negLabel, len(posLabel))
-    
-    featureMatrix = np.vstack((negFeatureMatrix, posFeatureMatrix))
-    label = np.hstack((negLabel, posLabel))
-    
-    f.close()
-
-    return featureMatrix, label
-
 if __name__ == "__main__":
 
+	# f = open('./simulatedFeatureLabel_500_100_10.txt')
+	# featureMatrix = []
+	# label = []
+	# for rawLine in f:
+	# 	featureLine = rawLine.strip().split("\t")
+	# 	featureNum = len(featureLine)
+	# 	featureList = []
+	# 	for featureIndex in range(featureNum-1):
+	# 		featureVal = float(featureLine[featureIndex])
+	# 		featureList.append(featureVal)
+
+	# 	labelVal = float(featureLine[featureNum-1])
+
+	# 	featureMatrix.append(featureList)
+	# 	label.append(labelVal)
+
+	# f.close()
 	# featureDim = 100
-	# sampleNum = 400
+	# sampleNum = 500
 	# classifierNum = 2
 
 	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
 	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
-
-	# featureLabelFile = "../data/kitchenReview_2"
-	# featureLabelFile = "./data/cellPhonesBOW.txt"
-	# featureLabelFile = "../data/electronicsBOW.txt"
 
 	f = open(featureLabelFile)
 	featureMatrix = []
@@ -349,19 +393,17 @@ if __name__ == "__main__":
 
 		featureMatrix.append(featureList)
 		label.append(labelVal)
-	f.close()
-
-	# letterAMCSV = "../letterO.csv"
-	# featureMatrix, label = readFeatureLabelCSV(letterAMCSV)
+	labelArray = np.array(label)
 	# specificClass = 2
 	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+"_"+str(specificClass)+".txt"	
 	# transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 	# transferLabelArray = np.array(transferLabelList)
 	# labelArray = np.array(targetLabelList)
 	# print("labelArray", ct(labelArray))
-	
+	# f.close()
+
 	fold = 10
 	rounds = 100
-	al = active_learning(fold, rounds, featureMatrix, label)
+	al = active_learning(fold, rounds, featureMatrix, labelArray)
 
 	al.run_CV()
