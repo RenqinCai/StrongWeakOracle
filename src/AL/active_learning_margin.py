@@ -29,7 +29,7 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "kitchen"
+dataName = "electronics"
 
 modelName = "activeLearning_margin_"+dataName
 timeStamp = datetime.now()
@@ -204,7 +204,7 @@ class active_learning:
 			# self.clf = LR(random_state=3, fit_intercept=False)
 
 			# self.clf = LR(fit_intercept=False)
-			self.clf = LR(multi_class="multinomial", solver='lbfgs')
+			self.clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -346,7 +346,8 @@ if __name__ == "__main__":
 
 	# featureLabelFile = "../data/kitchenReview_2"
 	# featureLabelFile = "../data/electronicsBOW.txt"
-	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
+	# processedKitchenElectronics
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
 
 	f = open(featureLabelFile)
 

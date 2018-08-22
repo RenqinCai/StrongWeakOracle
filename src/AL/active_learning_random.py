@@ -29,7 +29,8 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "kitchen"
+dataName = "electronics"
+
 modelName = "activeLearning_random_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
@@ -128,36 +129,8 @@ class active_learning:
 		initList += random.sample(posTrain, 2)
 		initList += random.sample(negTrain, 1)
 
-		# initList += posTrain[:2]
-		# initList += negTrain[:1]
-
 		print("initList", initList)
 
-
-		# self.m_preClf = LR(multi_class="multinomial", solver='lbfgs',random_state=3, fit_intercept=False)
-		# self.m_preClf.fit(self.fn[train], self.label[train])
-
-
-		# distance = self.m_preClf.decision_function(self.fn[train])
-
-		# posDistanceMap = {}
-		# negDistanceMap = {}
-		# for trainIndex in range(len(train)):
-		# 	if self.label[train[trainIndex]] == 1.0:
-		# 		# print(self.label[train[trainIndex]])
-		# 		posDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
-		# 	else:
-		# 		negDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
-
-		# sortedTrainIndexList = sorted(posDistanceMap, key=posDistanceMap.__getitem__, reverse=True)
-		# initList = []
-		
-		# initList += sortedTrainIndexList[:2]
-
-		# sortedTrainIndexList = sorted(negDistanceMap, key=negDistanceMap.__getitem__, reverse=True)
-		# initList += sortedTrainIndexList[:1]
-
-		# print(initList)
 		return initList
 
 	def run_CV(self):
@@ -187,7 +160,7 @@ class active_learning:
 		for foldIndex in range(foldNum):
 			# self.clf = LinearSVC(random_state=3)
 			# self.clf = LR(fit_intercept=False)
-			self.clf = LR(multi_class="multinomial", solver='lbfgs')
+			self.clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -328,11 +301,9 @@ if __name__ == "__main__":
 	# classifierNum = 2
 
 	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
-	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
 
-	# featureLabelFile = "../data/kitchenReview_2"
-	# featureLabelFile = "./data/cellPhonesBOW.txt"
-	# featureLabelFile = "../data/electronicsBOW.txt"
+	### processedBooksElectronics
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
 
 	f = open(featureLabelFile)
 	featureMatrix = []
@@ -351,14 +322,6 @@ if __name__ == "__main__":
 		label.append(labelVal)
 	f.close()
 
-	# letterAMCSV = "../letterO.csv"
-	# featureMatrix, label = readFeatureLabelCSV(letterAMCSV)
-	# specificClass = 2
-	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+"_"+str(specificClass)+".txt"	
-	# transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
-	# transferLabelArray = np.array(transferLabelList)
-	# labelArray = np.array(targetLabelList)
-	# print("labelArray", ct(labelArray))
 	
 	fold = 10
 	rounds = 100

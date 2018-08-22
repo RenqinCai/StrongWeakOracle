@@ -1,5 +1,5 @@
 """
-active learning with random initialization and least confidence query strategy
+active learning with LUCB as the query strategy
 """
 
 import numpy as np
@@ -29,7 +29,7 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "kitchen"
+dataName = "electronics"
 
 modelName = "activeLearning_LUCB_"+dataName
 timeStamp = datetime.now()
@@ -116,15 +116,6 @@ class active_learning:
 
 		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
-
-		# sortedUnlabeledIdList2 = sorted(unlabeledIDScoreMap2, key=unlabeledIDScoreMap2.__getitem__, reverse=True)
-
-		# for unlabeledIdIndex in range(unlabeledIdNum):
-		# 	unlabeledId = sortedUnlabeledIdList[unlabeledIdIndex]
-		# 	unlabeledId2 = sortedUnlabeledIdList2[unlabeledIdIndex]
-
-		# 	print(sortedUnlabeledIdList[unlabeledIdIndex], unlabeledIdScoreMap[unlabeledId], sortedUnlabeledIdList2[unlabeledIdIndex], unlabeledIDScoreMap2[unlabeledId2])
-
 		return sortedUnlabeledIdList[0]
 
 	def init_confidence_bound(self, featureDim):
@@ -233,7 +224,7 @@ class active_learning:
 		for foldIndex in range(foldNum):
 			# self.clf = LinearSVC(random_state=3)
 
-			self.m_clf = LR(multi_class="multinomial", solver='lbfgs', fit_intercept=False)
+			self.m_clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -354,29 +345,8 @@ def readTransferLabel(transferLabelFile):
 
 if __name__ == "__main__":
 
-	# f = open('./simulatedFeatureLabel_500_100_10.txt')
-	# featureMatrix = []
-	# label = []
-	# for rawLine in f:
-	# 	featureLine = rawLine.strip().split("\t")
-	# 	featureNum = len(featureLine)
-	# 	featureList = []
-	# 	for featureIndex in range(featureNum-1):
-	# 		featureVal = float(featureLine[featureIndex])
-	# 		featureList.append(featureVal)
-
-	# 	labelVal = float(featureLine[featureNum-1])
-
-	# 	featureMatrix.append(featureList)
-	# 	label.append(labelVal)
-
-	# f.close()
-	# featureDim = 100
-	# sampleNum = 500
-	# classifierNum = 2
-
-	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
-	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	# featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
 
 	f = open(featureLabelFile)
 	featureMatrix = []
@@ -394,13 +364,7 @@ if __name__ == "__main__":
 		featureMatrix.append(featureList)
 		label.append(labelVal)
 	labelArray = np.array(label)
-	# specificClass = 2
-	# transferLabelFile = "./simulatedTransferLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+"_"+str(specificClass)+".txt"	
-	# transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
-	# transferLabelArray = np.array(transferLabelList)
-	# labelArray = np.array(targetLabelList)
-	# print("labelArray", ct(labelArray))
-	# f.close()
+	
 
 	fold = 10
 	rounds = 100

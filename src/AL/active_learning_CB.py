@@ -29,7 +29,8 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "kitchen"
+dataName = "electronics"
+
 modelName = "activeLearning_CB_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
@@ -79,68 +80,18 @@ class active_learning:
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
 
-		# return random.sample(unlabeled_list, 1)[0]
-
-		# print("debug")
-		# return sortedUnlabeledIdList[0]
-		# unlabeledIDScoreMap2 = {}
-
-		# print("---------------")
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			# print("unlabeledId\t", unlabeledId)
 			labelPredictProb = self.clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
 
-			# print(self.clf.coef_)
-
-			# labelIndexMap = {} ##labelIndex: labelProb
-			# labelNum = len(labelPredictProb)
-			# for labelIndex in range(labelNum):
-			# 	labelIndexMap.setdefault(labelIndex, labelPredictProb[labelIndex])
-
-			# sortedLabelIndexList = sorted(labelIndexMap, key=labelIndexMap.__getitem__, reverse=True)
-			# print("labelPredictProb\t", labelPredictProb)
-			# sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
-			# # print(sortedLabelPredictProb)
-			# maxLabelPredictProb = sortedLabelPredictProb[0]
-			# subMaxLabelPredictProb = sortedLabelPredictProb[1]
-			# maxLabelIndex = sortedLabelIndexList[0]
-			# subMaxLabelIndex = sortedLabelIndexList[1]
-
 			selectCB = self.get_select_confidence_bound(unlabeledId)
-				# probDiff = sigmoid(np.dot(maxCoef, self.fn[unlabeledId])-self.m_selectCbRate*selectCB)-sigmoid(np.dot(subMaxCoef, self.fn[unlabeledId])+self.m_selectCbRate*selectCB)
-			# print(coefDiff, selectCB, self.m_selectCbRate*selectCB)
-			# LCB = coefDiff-2*0.002*selectCB
 
-			# LCB = coefDiff-2*self.m_selectCbRate*selectCB
 			idScore = selectCB
-			# idScore = 1-probDiff
-			# print("idScore", idScore)
-
-			# print(maxLabelIndex, subMaxLabelIndex)
-		
-			# marginProb = maxLabelPredictProb-subMaxLabelPredictProb
-
-
-			# print("selectCB", self.m_selectCbRate*selectCB)
-			# LCB = maxLabelPredictProb+self.m_selectCbRate*selectCB
-				
-			# LCB = sigmoid(coefDiff) -2*selectCB
-
-			# idScore = LCB
-			# unlabeledIDScoreMap2[unlabeledId] = 1-coefDiff
+			
 			unlabeledIdScoreMap[unlabeledId] = idScore
 
-		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
-
-		# sortedUnlabeledIdList2 = sorted(unlabeledIDScoreMap2, key=unlabeledIDScoreMap2.__getitem__, reverse=True)
-
-		# for unlabeledIdIndex in range(unlabeledIdNum):
-		# 	unlabeledId = sortedUnlabeledIdList[unlabeledIdIndex]
-		# 	unlabeledId2 = sortedUnlabeledIdList2[unlabeledIdIndex]
-
-		# 	print(sortedUnlabeledIdList[unlabeledIdIndex], unlabeledIdScoreMap[unlabeledId], sortedUnlabeledIdList2[unlabeledIdIndex], unlabeledIDScoreMap2[unlabeledId2])
 
 		return sortedUnlabeledIdList[0]
 
@@ -194,31 +145,6 @@ class active_learning:
 
 		print("initList", initList)
 
-
-		# self.m_preClf = LR(multi_class="multinomial", solver='lbfgs',random_state=3, fit_intercept=False)
-		# self.m_preClf.fit(self.fn[train], self.label[train])
-
-
-		# distance = self.m_preClf.decision_function(self.fn[train])
-
-		# posDistanceMap = {}
-		# negDistanceMap = {}
-		# for trainIndex in range(len(train)):
-		# 	if self.label[train[trainIndex]] == 1.0:
-		# 		# print(self.label[train[trainIndex]])
-		# 		posDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
-		# 	else:
-		# 		negDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
-
-		# sortedTrainIndexList = sorted(posDistanceMap, key=posDistanceMap.__getitem__, reverse=True)
-		# initList = []
-		
-		# initList += sortedTrainIndexList[:2]
-
-		# sortedTrainIndexList = sorted(negDistanceMap, key=negDistanceMap.__getitem__, reverse=True)
-		# initList += sortedTrainIndexList[:1]
-
-		# print(initList)
 		return initList
 
 
@@ -251,7 +177,7 @@ class active_learning:
 		for foldIndex in range(foldNum):
 			# self.clf = LinearSVC(random_state=3)
 
-			self.clf = LR(multi_class="multinomial", solver='lbfgs', fit_intercept=False)
+			self.clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -349,10 +275,9 @@ class active_learning:
 
 if __name__ == "__main__":
 
-	# featureDim = 100
-	# sampleNum = 400
-	# classifierNum = 2
-	featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+
+	# featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
 	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
 	f = open(featureLabelFile)
 	# f = open('./simulatedFeatureLabel_500.txt')
