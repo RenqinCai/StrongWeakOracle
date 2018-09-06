@@ -1,5 +1,5 @@
 """
-train a weak oracle on the source domain data and a strong oracle on the target domain data
+train a weak oracle on the source domain data and a strong oracle on the target domain data. Use the difference of oracle's weight to predict the output of the auditor
 """
 
 import numpy as np
@@ -31,7 +31,10 @@ from sklearn.model_selection import train_test_split
 
 from datetime import datetime
 
-modelName = "activeLearning_offline_transfer"
+sourceDataName = "books"
+targetDataName = "electronics"
+
+modelName = "passiveAuditorActiveLearner_"+sourceDataName+"_"+targetDataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -75,8 +78,10 @@ class active_learning:
 		self.m_AInv = 0
 		self.m_cbRate = 0.05 ##0.05
 
-		self.ex_id = dd(list)
+		self.m_strongClf = None
+		self.m_weakClf = None
 
+		self.ex_id = dd(list)
 
 	def get_pred_acc(self, fn_test, label_test, labeled_list):
 
@@ -85,9 +90,6 @@ class active_learning:
 		
 		self.m_clf.fit(fn_train, label_train)
 		fn_preds = self.m_clf.predict(fn_test)
-
-		# print(len(label_train), sum(label_train), "ratio", sum(label_train)*1.0/len(label_train))
-		# print("label_train", label_train)
 
 		acc = accuracy_score(label_test, fn_preds)
 		# print("acc\t", acc)
@@ -129,74 +131,54 @@ class active_learning:
 
 		coefList = [0 for i in range(10)]
 
-		for foldIndex in range(foldNum):
-			
-			self.m_clf = LinearSVC(random_state=3)
-			source_fn_train, source_fn_test, source_label_train, source_label_test = train_test_split(self.source_fn, self.source_label, random_state=3, test_size=0.1)
-			# self.m_clf.fit(self.source_fn, self.source_label)
-			self.m_clf.fit(source_fn_train, source_label_train)
-			label_preds = self.m_clf.predict(source_fn_test)
-			acc = accuracy_score(source_label_test, label_preds)
-			print("original", acc)
-
-			# self.m_clf = LR(fit_intercept=False)
-
-			# self.m_clf = LR(random_state=3, fit_intercept=False)
-
-			train = []
-			for preFoldIndex in range(foldIndex):
-				train.extend(foldInstanceList[preFoldIndex])
-
-			test = foldInstanceList[foldIndex]
-			for postFoldIndex in range(foldIndex+1, foldNum):
-				train.extend(foldInstanceList[postFoldIndex])
-
-			trainNum = int(totalInstanceNum*0.9)
-			
-			# print(test)
-			fn_test = self.target_fn[test]
-
-			label_test = self.target_label[test]
-
-			sampledTrainNum = len(train)
-
-			train_sampled = random.sample(train, sampledTrainNum)
-
-			fn_train = self.target_fn[train_sampled]
-			label_train = self.target_label[train_sampled]
 		
-			coefList[cvIter] = self.m_clf.coef_
+	
+		self.m_weakClf = LR(random_state=3)
+		# source_fn_train, source_fn_test, source_label_train, source_label_test = train_test_split(self.source_fn, self.source_label, random_state=3, test_size=0.1)
+		# self.m_clf.fit(self.source_fn, self.source_label)
+		self.m_weakClf.fit(self.source_fn, self.source_label)
 
-			label_preds = self.m_clf.predict(fn_test)
-			acc = accuracy_score(label_test, label_preds)
+		# self.m_clf = LR(fit_intercept=False)
 
-			totalAccList[cvIter] = acc
-			
-			cvIter += 1      
+		# self.m_clf = LR(random_state=3, fit_intercept=False)
+
+		self.m_strongClf = LR(random_state=3)
+		self.m_strongClf.fit(self.target_fn, self.target_label)
+
+		predTargetLabels = self.m_weakClf.predict(self.target_fn)
+		auditorLabels = (self.target_label == predTargetLabels).reshape(-1, 1)
+		# print(test)
 		
-		totalACCFile = modelVersion+".txt"
-		f = open(totalACCFile, "w")
-		for i in range(10):
-			f.write(str(totalAccList[i]))
-			# for j in range(totalAlNum):
-			# 	f.write(str(totalAccList[i][j])+"\t")
-			f.write("\n")
-		f.close()
+		coefDiff = self.m_strongClf.coef_ - self.m_weakClf.coef_
+		predAuditorLabels = np.dot(self.target_fn, coefDiff.reshape(-1, 1))
+		predAuditorLabels = np.abs(predAuditorLabels)
 
-		coefFile = modelVersion+"_coef.txt"
-		f = open(coefFile, "w")
-		for i in range(10):
-			coef4Classifier = coefList[i]
-			coefNum = len(coef4Classifier)
+		# print(predAuditorLabels.shape)
 
-			for coefIndex in range(coefNum):
-				f.write(str(coef4Classifier[coefIndex])+"\t")
-			f.write("\n")
+		print(np.mean(predAuditorLabels), np.var(predAuditorLabels))
+		
+		deltaList = [i for i in np.arange(0.0, 10.0, 0.01)]
+		maxAcc = 0
+		# print(deltaList)
+		for delta in deltaList:
+			if delta %2 == 0:
+				print("delta", delta)
+		# delta = 3.0
+			predAuditorLabels = predAuditorLabels < delta
 
-		f.close()
+			correctPredLabels = (auditorLabels == predAuditorLabels)
+			# print(auditorLabels)
+			# print(correctPredLabels)
 
-		print(np.mean(totalAccList), np.sqrt(np.var(totalAccList)))
-
+			# print(np.sum(correctPredLabels), len(correctPredLabels))
+			acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
+				
+			if acc > maxAcc:
+				maxAcc = acc
+				print(np.sum(predAuditorLabels))
+				print("predAuditorLabels", predAuditorLabels)
+				print(delta, "maxAcc\t", maxAcc)
+		
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
 
@@ -276,8 +258,7 @@ def readFeatureLabelCSV(csvFile):
 
 if __name__ == "__main__":
 
-
-	sourceFeatureLabelFile = "./data/cellPhonesBOW.txt"
+	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
 	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
 
 	sourceLabel = np.array(sourceLabelList)
@@ -285,7 +266,7 @@ if __name__ == "__main__":
 
 	print('class count of true source labels of all ex:\n', ct(sourceLabel))
 
-	targetFeatureLabelFile = "./data/electronicsBOW.txt"
+	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
 	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
 
 	targetLabel = np.array(targetLabelList)

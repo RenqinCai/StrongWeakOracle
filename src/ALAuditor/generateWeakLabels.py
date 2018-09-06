@@ -1,5 +1,5 @@
 """
-train a weak oracle on the source domain data and a strong oracle on the target domain data
+generate transferred labels from weak oracle.
 """
 
 import numpy as np
@@ -9,7 +9,7 @@ import random
 import re
 import itertools
 import pylab as pl
-
+import os
 from collections import defaultdict as dd
 from collections import Counter as ct
 
@@ -31,7 +31,14 @@ from sklearn.model_selection import train_test_split
 
 from datetime import datetime
 
-modelName = "activeLearning_offline_transfer"
+# sourceDataName = "electronics"
+# targetDataName = "kitchen"
+
+sourceDataName = "books"
+targetDataName = "electronics"
+
+dataName = sourceDataName+"--"+targetDataName
+modelName = "activeLearning_offline_transfer_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -95,7 +102,7 @@ class active_learning:
 		return acc
 
 
-	def run_CV(self):
+	def run_CV(self, dataDir, sourceName, targetName):
 
 		cvIter = 0
 		
@@ -129,73 +136,33 @@ class active_learning:
 
 		coefList = [0 for i in range(10)]
 
-		for foldIndex in range(foldNum):
-			
-			self.m_clf = LinearSVC(random_state=3)
-			source_fn_train, source_fn_test, source_label_train, source_label_test = train_test_split(self.source_fn, self.source_label, random_state=3, test_size=0.1)
-			# self.m_clf.fit(self.source_fn, self.source_label)
-			self.m_clf.fit(source_fn_train, source_label_train)
-			label_preds = self.m_clf.predict(source_fn_test)
-			acc = accuracy_score(source_label_test, label_preds)
-			print("original", acc)
+		self.m_clf = LR(random_state=3)
+		self.m_clf.fit(self.source_fn, self.source_label)
 
-			# self.m_clf = LR(fit_intercept=False)
+		target_preds = self.m_clf.predict(self.target_fn)
+		acc = accuracy_score(self.target_label, target_preds)
 
-			# self.m_clf = LR(random_state=3, fit_intercept=False)
+		print("transfer acc", acc)	
 
-			train = []
-			for preFoldIndex in range(foldIndex):
-				train.extend(foldInstanceList[preFoldIndex])
+		transferLabelFileName = "transferLabel_"+sourceName+"--"+targetName+".txt"
+		transferLabelFileName = os.path.join(dataDir, transferLabelFileName)
+		f = open(transferLabelFileName, "w")
 
-			test = foldInstanceList[foldIndex]
-			for postFoldIndex in range(foldIndex+1, foldNum):
-				train.extend(foldInstanceList[postFoldIndex])
+		f.write("auditorLabel"+"\t"+"transferLabel"+"\t"+"trueLabel\n")
+		for instanceIndex in range(totalInstanceNum):
+			transferLabel = target_preds[instanceIndex]
+			trueLabel = self.target_label[instanceIndex]
 
-			trainNum = int(totalInstanceNum*0.9)
-			
-			# print(test)
-			fn_test = self.target_fn[test]
+			if transferLabel == trueLabel:
+				f.write("1.0"+"\t")
+			else:
+				f.write("0.0"+"\t")
 
-			label_test = self.target_label[test]
-
-			sampledTrainNum = len(train)
-
-			train_sampled = random.sample(train, sampledTrainNum)
-
-			fn_train = self.target_fn[train_sampled]
-			label_train = self.target_label[train_sampled]
-		
-			coefList[cvIter] = self.m_clf.coef_
-
-			label_preds = self.m_clf.predict(fn_test)
-			acc = accuracy_score(label_test, label_preds)
-
-			totalAccList[cvIter] = acc
-			
-			cvIter += 1      
-		
-		totalACCFile = modelVersion+".txt"
-		f = open(totalACCFile, "w")
-		for i in range(10):
-			f.write(str(totalAccList[i]))
-			# for j in range(totalAlNum):
-			# 	f.write(str(totalAccList[i][j])+"\t")
-			f.write("\n")
-		f.close()
-
-		coefFile = modelVersion+"_coef.txt"
-		f = open(coefFile, "w")
-		for i in range(10):
-			coef4Classifier = coefList[i]
-			coefNum = len(coef4Classifier)
-
-			for coefIndex in range(coefNum):
-				f.write(str(coef4Classifier[coefIndex])+"\t")
+			f.write(str(transferLabel)+"\t"+str(trueLabel))
 			f.write("\n")
 
 		f.close()
 
-		print(np.mean(totalAccList), np.sqrt(np.var(totalAccList)))
 
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
@@ -276,8 +243,10 @@ def readFeatureLabelCSV(csvFile):
 
 if __name__ == "__main__":
 
+	###processedKitchenElectronics electronics ---> kitchen
 
-	sourceFeatureLabelFile = "./data/cellPhonesBOW.txt"
+	###processedBooksElectronics books ---> electronics
+	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
 	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
 
 	sourceLabel = np.array(sourceLabelList)
@@ -285,7 +254,7 @@ if __name__ == "__main__":
 
 	print('class count of true source labels of all ex:\n', ct(sourceLabel))
 
-	targetFeatureLabelFile = "./data/electronicsBOW.txt"
+	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
 	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
 
 	targetLabel = np.array(targetLabelList)
@@ -297,4 +266,6 @@ if __name__ == "__main__":
 	rounds = 100
 	al = active_learning(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
 
-	al.run_CV()
+	dataDir = "../../dataset/processed_acl/processedBooksElectronics/"
+
+	al.run_CV(dataDir, "books", "electronics")
