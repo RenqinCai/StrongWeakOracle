@@ -145,12 +145,12 @@ class active_learning:
 		# PCADim = 20
 		# self.PCAFeature(PCADim)
 		# print("PCADim", PCADim)
-		foldNum = 1
+		# foldNum = 10
 		for foldIndex in range(foldNum):
 			
 			# self.m_clf = LinearSVC(random_state=3)
-			self.m_clf = SVC(random_state=3)
-			# self.m_clf = LR(random_state=3)
+			# self.m_clf = SVC(random_state=3)
+			self.m_clf = LR(random_state=3)
 			# self.m_clf = RFC(random_state=3)
 
 
@@ -184,7 +184,7 @@ class active_learning:
 			acc = accuracy_score(label_test, label_preds)
 
 			debugExl = "auditor.xlsx"
-			savePredLabel(debugExl, self.transferLabel[train], self.targetLabel[train], label_test, label_preds)
+			# savePredLabel(debugExl, self.transferLabel[train], self.targetLabel[train], label_test, label_preds)
 
 			totalAccList[cvIter] = acc
 

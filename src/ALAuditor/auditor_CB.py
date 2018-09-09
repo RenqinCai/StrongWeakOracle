@@ -1,5 +1,5 @@
 """
-active learning for auditor, margin as query strategy
+active learning with random initialization and CB query strategy
 """
 
 import numpy as np
@@ -31,7 +31,8 @@ from datetime import datetime
 
 dataName = "electronics"
 
-modelName = "auditor_margin_"+dataName
+modelName = "auditor_CB_"+dataName
+
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -51,7 +52,6 @@ def get_name_features(names):
 		fn = cv.fit_transform(name).toarray()
 
 		return fn
-
 class active_learning:
 
 	def __init__(self, fold, rounds, fn, label):
@@ -77,30 +77,16 @@ class active_learning:
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
 		# print("---------------")
-		
+		alpha = 0.1
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
-			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
-
-			sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
-
-			maxLabelPredictProb = sortedLabelPredictProb[0]
-			subMaxLabelPredictProb = sortedLabelPredictProb[1]
-
-			idScore = maxLabelPredictProb-subMaxLabelPredictProb
-			idScore = -idScore
-			# selectCB = self.get_confidence_bound(unlabeledId)
-			# print("selectCB", self.m_selectCbRate*selectCB)
-			# LCB = maxLabelPredictProb+self.m_selectCbRate*selectCB
-
-			# idScore = np.dot(self.m_clf.coef_, self.fn[unlabeledId])-2*alpha*selectCB
-
-			# idScore = -selectCB
-
-			# print(np.dot(self.m_clf.coef_, self.fn[unlabeledId]), 2*selectCB, 2*alpha*selectCB)
+			
+			selectCB = self.get_confidence_bound(unlabeledId)
+			
+			idScore = selectCB
+			
 			unlabeledIdScoreMap[unlabeledId] = idScore
-		# exit()
-		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
+		
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
 		return sortedUnlabeledIdList[0]
@@ -224,7 +210,7 @@ class active_learning:
 			unlabeledExList = list(set(train)-set(labeledExList))
 
 			featureDim = len(self.fn[0])
-			# self.init_confidence_bound(featureDim)
+			self.init_confidence_bound(featureDim)
 
 			while queryIter < rounds:
 				fn_train_iter = []
@@ -236,7 +222,7 @@ class active_learning:
 				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList)
-				# self.update_confidence_bound(idx) 
+				self.update_confidence_bound(idx) 
 				# print(queryIter, "idx", idx, self.label[idx])
 				labeledExList.append(idx)
 				unlabeledExList.remove(idx)
@@ -303,6 +289,7 @@ def readTransferLabel(transferLabelFile):
 	f.close()
 
 	return auditorLabelList, transferLabelList, targetLabelList
+
 
 if __name__ == "__main__":
 
