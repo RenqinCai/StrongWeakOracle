@@ -1,5 +1,5 @@
 """
-train a weak oracle on the source domain data and a strong oracle on the target domain data. Use the difference of oracle's weight to predict the output of the auditor. Use the output of dot product to predict the auditor label
+train a weak oracle on the source domain data and a strong oracle on the target domain data. Use the difference of oracle's weight to predict the output of the auditor
 """
 
 import numpy as np
@@ -130,80 +130,104 @@ class active_learning:
 		totalAccList = [0 for i in range(10)]
 
 		coefList = [0 for i in range(10)]
-	
+
 		self.m_weakClf = LR(random_state=3)
 		self.m_weakClf.fit(self.source_fn, self.source_label)
-		
-		# source_fn_train, source_fn_test, source_label_train, source_label_test = train_test_split(self.target_fn, self.source_label, random_state=3, test_size=0.1)
+
+		transferLabel = self.m_weakClf.predict(self.target_fn)
+
+		for foldIndex in range(foldNum):
+			train = []
+			for preFoldIndex in range(foldIndex):
+				train.extend(foldInstanceList[preFoldIndex])
+
+			test = foldInstanceList[foldIndex]
+			for postFoldIndex in range(foldIndex+1, foldNum):
+				train.extend(foldInstanceList[postFoldIndex])
+ 	
+		# source_fn_train, source_fn_test, source_label_train, source_label_test = train_test_split(self.source_fn, self.source_label, random_state=3, test_size=0.1)
 		# self.m_clf.fit(self.source_fn, self.source_label)
-		
+			
 
 		# self.m_clf = LR(fit_intercept=False)
 
 		# self.m_clf = LR(random_state=3, fit_intercept=False)
 
-		train = []
-		foldIndex = 1
-		for preFoldIndex in range(foldIndex):
-			train.extend(foldInstanceList[preFoldIndex])
-		for postFoldIndex in range(foldIndex+1, foldNum):
-			train.extend(foldInstanceList[postFoldIndex])
+			self.m_strongClf = LR(random_state=3)
+			self.m_strongClf.fit(self.target_fn[train], self.target_label[train])
 
-		test = foldInstanceList[foldIndex]
+			predLabel = self.m_strongClf.predict(self.target_fn[test])
 
-		self.m_strongClf = LR(random_state=3)
-		self.m_strongClf.fit(self.target_fn[train], self.target_label[train])
+			accLR = accuracy_score(predLabel, self.target_label[test])
+			print("strong accLR", accLR)
 
-		predTargetLabels = self.m_weakClf.predict(self.target_fn)
+			self.m_weakTransferClf = LR(random_state=3)
+			self.m_weakTransferClf.fit(self.target_fn[train], transferLabel[train])
 
-		self.m_transferWeakClf = LR(random_state=3)
-		self.m_transferWeakClf.fit(self.target_fn[train], predTargetLabels[train])
+			predTargetLabels = self.m_weakTransferClf.predict(self.target_fn[test])
 
-		auditorLabels = (self.target_label == predTargetLabels).reshape(-1, 1)
-		# print(test)
+			accLR = accuracy_score(predTargetLabels, transferLabel[test])
+			print("weak accLR", accLR)
+
+		# 	auditorLabels = (self.target_label[test] == transferLabel[test]).reshape(-1, 1)
+		# # print(test)
 		
-
-		strongPred = np.dot(self.target_fn[test], self.m_strongClf.coef_.reshape(-1, 1))+self.m_strongClf.intercept_
-		weakPred = np.dot(self.target_fn[test], self.m_transferWeakClf.coef_.reshape(-1, 1))+self.m_transferWeakClf.intercept_
-
-		# print(strongPred, weakPred)
-
-		predAuditorLabels = strongPred*weakPred
-
-		predAuditorLabels = predAuditorLabels > 0
-		correctPredLabels = (auditorLabels[test] == predAuditorLabels)
-			
-		acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
-		print("ACC", acc)
-
-		# coefDiff = self.m_strongClf.coef_ - self.m_weakClf.coef_
-		# predAuditorLabels = np.dot(self.source_fn, coefDiff.reshape(-1, 1))
-		# predAuditorLabels = np.abs(predAuditorLabels)
+		# 	coefDiff = self.m_strongClf.coef_ - self.m_weakClf.coef_
+		# 	predAuditorLabels = np.dot(self.target_fn[test], coefDiff.reshape(-1, 1))
+		# 	# print("intercept", self.m_strongClf.intercept_, self.m_weakClf.intercept_)
+		# 	predAuditorLabels += self.m_strongClf.intercept_ - self.m_weakClf.intercept_
+		# 	predAuditorLabels = np.abs(predAuditorLabels)
 
 		# # print(predAuditorLabels.shape)
 
-		# print(np.mean(predAuditorLabels), np.var(predAuditorLabels))
+		# 	print(np.min(predAuditorLabels), np.max(predAuditorLabels))
 		
-		# deltaList = [i for i in np.arange(0.0, 10.0, 0.01)]
-		# maxAcc = 0
+		# 	deltaList = [i for i in np.arange(0.0, 25.0, 0.005)]
+		# 	maxAcc = 0
+
+		# 	print("pos", sum(auditorLabels)*1.0/len(auditorLabels))
 		# # print(deltaList)
-		# for delta in deltaList:
-		# # delta = 3.0
-			# predAuditorLabels = predAuditorLabels < delta
-
-			# correctPredLabels = (auditorLabels == predAuditorLabels)
-			# print(auditorLabels)
-			# print(correctPredLabels)
-
-			# print(np.sum(correctPredLabels), len(correctPredLabels))
-			# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
+		# 	maxDelta = -1
+		# 	for delta in deltaList:
+		# # delta = 0.005
+		# 		# if delta %2 == 0:
+		# 		# 	print("delta", delta)
+		# 	# delta = 3.0
+		# 		predAuditorLabelsDelta = (predAuditorLabels < delta)
+		# 		# print("predAuditorLabels", predAuditorLabelsDelta)
 				
-			# if acc > maxAcc:
-			# 	maxAcc = acc
-			# 	print(np.sum(predAuditorLabels))
-			# 	print("predAuditorLabels", predAuditorLabels)
-			# 	print(delta, "maxAcc\t", maxAcc)
-		
+		# 		accLinear = accuracy_score((self.target_label[test] == transferLabel[test]), predAuditorLabelsDelta)
+
+		# 		# correctPredLabels = (auditorLabels == predAuditorLabelsDelta)
+		# 		# print(auditorLabels)
+		# 		# print(correctPredLabels)
+
+		# 		# print(np.sum(correctPredLabels), len(correctPredLabels))
+		# 		# print(correctPredLabels)
+		# 		# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
+					
+		# 		if accLinear > maxAcc:
+		# 			maxAcc = accLinear
+		# 			maxDelta = delta
+		# 			# print("sum", np.sum(predAuditorLabelsDelta))
+		# 			# print("predAuditorLabels", predAuditorLabelsDelta)
+		# 	print(maxDelta, "maxAcc\t", maxAcc)
+
+		# 	self.m_auditor = LR(random_state=3)
+		# 	self.m_auditor.fit(self.target_fn[train], (self.target_label[train] == transferLabel[train]))
+
+		# 	auditorLabelsLR = self.m_auditor.predict(self.target_fn[test])
+
+		# 	accLR = accuracy_score((self.target_label[test] == transferLabel[test]), auditorLabelsLR)
+		# 	print("accLR", accLR)
+
+		# 	strongPred = np.dot(self.target_fn[test], self.m_strongClf.coef_.reshape(-1, 1))+self.m_strongClf.intercept_
+		# 	weakPred = np.dot(self.target_fn[test], self.m_weakTransferClf.coef_.reshape(-1, 1))+self.m_weakTransferClf.intercept_
+
+		# 	auditorLabelsDotProduct = strongPred*weakPred > 0
+		# 	accDotProduct = accuracy_score((self.target_label[test] == transferLabel[test]), auditorLabelsDotProduct)
+		# 	print("accDotProduct", accDotProduct)
+				
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
 

@@ -216,9 +216,9 @@ class _ProactiveLearning:
 
 	def get_transfer_flag(self, exId, judgeRound):
 
-		strongPred = np.dot(self.m_targetNameFeature[exId], self.m_clf.coef_.reshape(-1, 1))
+		strongPred = np.dot(self.m_targetNameFeature[exId], self.m_clf.coef_.reshape(-1, 1))+self.m_clf.intercept_
 
-		weakPred = np.dot(self.m_targetNameFeature[exId], self.m_weakOracle.coef_.reshape(-1, 1))
+		weakPred = np.dot(self.m_targetNameFeature[exId], self.m_weakOracle.coef_.reshape(-1, 1))+self.m_weakOracle.intercept_
 
 		weakPred = self.m_transferLabel[exId]
 		# strongPredLabel = 0

@@ -142,6 +142,40 @@ class active_learning:
 
 		# self.m_clf = LR(random_state=3, fit_intercept=False)
 
+		# train = []
+		# foldIndex = 1
+		# for preFoldIndex in range(foldIndex):
+		# 	train.extend(foldInstanceList[preFoldIndex])
+		# for postFoldIndex in range(foldIndex+1, foldNum):
+		# 	train.extend(foldInstanceList[postFoldIndex])
+
+		# test = foldInstanceList[foldIndex]
+
+		# self.m_strongClf = LR(random_state=3)
+		# self.m_strongClf.fit(self.target_fn[train], self.target_label[train])
+
+		# predTargetLabels = self.m_weakClf.predict(self.target_fn)
+
+		# self.m_transferWeakClf = LR(random_state=3)
+		# self.m_transferWeakClf.fit(self.target_fn[train], predTargetLabels[train])
+
+		# auditorLabels = (self.target_label == predTargetLabels).reshape(-1, 1)
+		# # print(test)
+		
+
+		# strongPred = np.dot(self.target_fn[test], self.m_strongClf.coef_.reshape(-1, 1))+self.m_strongClf.intercept_
+		# weakPred = np.dot(self.target_fn[test], self.m_transferWeakClf.coef_.reshape(-1, 1))+self.m_transferWeakClf.intercept_
+
+		# # print(strongPred, weakPred)
+
+		# predAuditorLabels = strongPred*weakPred
+
+		# predAuditorLabels = predAuditorLabels > 0
+		# correctPredLabels = (auditorLabels[test] == predAuditorLabels)
+			
+		# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
+		# print("ACC", acc)
+
 		train = []
 		foldIndex = 1
 		for preFoldIndex in range(foldIndex):
@@ -152,57 +186,54 @@ class active_learning:
 		test = foldInstanceList[foldIndex]
 
 		self.m_strongClf = LR(random_state=3)
-		self.m_strongClf.fit(self.target_fn[train], self.target_label[train])
+		self.m_strongClf.fit(self.target_fn, self.target_label)
 
 		predTargetLabels = self.m_weakClf.predict(self.target_fn)
+		print(predTargetLabels.shape)
+		print(self.target_label.shape)
 
 		self.m_transferWeakClf = LR(random_state=3)
-		self.m_transferWeakClf.fit(self.target_fn[train], predTargetLabels[train])
+		self.m_transferWeakClf.fit(self.target_fn, predTargetLabels)
 
-		auditorLabels = (self.target_label == predTargetLabels).reshape(-1, 1)
+		auditorLabels = (self.target_label == predTargetLabels)
+
+		coefDiff = self.m_strongClf.coef_ - self.m_transferWeakClf.coef_
+		predAuditorLabels = np.dot(self.target_fn, coefDiff.reshape(-1, 1))
+		# print("intercept", self.m_strongClf.intercept_, self.m_weakClf.intercept_)
+		predAuditorLabels += self.m_strongClf.intercept_ - self.m_weakClf.intercept_
+		predAuditorLabels = np.abs(predAuditorLabels)
+
+		maxAcc = 0
+		maxDelta = 0
+		deltaList = [i for i in np.arange(0.0, 25.0, 0.005)]
+		for delta in deltaList:
+		# delta = 0.005
+				# if delta %2 == 0:
+				# 	print("delta", delta)
+			# delta = 3.0
+			predAuditorLabelsDelta = (predAuditorLabels < delta)
+			# print("predAuditorLabels", predAuditorLabelsDelta)
+			
+			accLinear = accuracy_score(auditorLabels, predAuditorLabelsDelta)
+
+			if accLinear > maxAcc:
+				maxAcc = accLinear
+				maxDelta = delta
+
 		# print(test)
 		
-
-		strongPred = np.dot(self.target_fn[test], self.m_strongClf.coef_.reshape(-1, 1))+self.m_strongClf.intercept_
-		weakPred = np.dot(self.target_fn[test], self.m_transferWeakClf.coef_.reshape(-1, 1))+self.m_transferWeakClf.intercept_
-
+		# linearAuditor = LR(random_state=3)
+		# linearAuditor.fit(self.target_fn, auditorLabels)
+		# predAuditorLabels = linearAuditor.predict(self.target_fn)
 		# print(strongPred, weakPred)
 
-		predAuditorLabels = strongPred*weakPred
+		# predAuditorLabels = strongPred-weakPred
 
-		predAuditorLabels = predAuditorLabels > 0
-		correctPredLabels = (auditorLabels[test] == predAuditorLabels)
+		# # predAuditorLabels = predAuditorLabels > 0
+		# correctPredLabels = (auditorLabels == predAuditorLabels)
 			
-		acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
-		print("ACC", acc)
-
-		# coefDiff = self.m_strongClf.coef_ - self.m_weakClf.coef_
-		# predAuditorLabels = np.dot(self.source_fn, coefDiff.reshape(-1, 1))
-		# predAuditorLabels = np.abs(predAuditorLabels)
-
-		# # print(predAuditorLabels.shape)
-
-		# print(np.mean(predAuditorLabels), np.var(predAuditorLabels))
-		
-		# deltaList = [i for i in np.arange(0.0, 10.0, 0.01)]
-		# maxAcc = 0
-		# # print(deltaList)
-		# for delta in deltaList:
-		# # delta = 3.0
-			# predAuditorLabels = predAuditorLabels < delta
-
-			# correctPredLabels = (auditorLabels == predAuditorLabels)
-			# print(auditorLabels)
-			# print(correctPredLabels)
-
-			# print(np.sum(correctPredLabels), len(correctPredLabels))
-			# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
-				
-			# if acc > maxAcc:
-			# 	maxAcc = acc
-			# 	print(np.sum(predAuditorLabels))
-			# 	print("predAuditorLabels", predAuditorLabels)
-			# 	print(delta, "maxAcc\t", maxAcc)
+		# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
+		print(maxDelta, "ACC", maxAcc)
 		
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
