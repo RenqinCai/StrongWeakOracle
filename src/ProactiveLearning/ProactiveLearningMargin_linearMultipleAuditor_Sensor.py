@@ -33,7 +33,7 @@ electronics, sensor_rice
 """
 dataName = "sensor_rice"
 
-modelName = "margin_linearAuditor_"+dataName
+modelName = "margin_linearMultipleAuditor_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -57,7 +57,7 @@ def sigmoid(x):
 
 class _ProactiveLearning:
 
-	def __init__(self, fold, rounds, featureMatrix, label, transferLabel):
+	def __init__(self, fold, rounds, featureMatrix, label, transferLabel0, transferLabel1):
 
 		self.m_fold = fold
 		self.m_rounds = rounds
@@ -65,7 +65,8 @@ class _ProactiveLearning:
 		self.m_targetNameFeature = np.array(featureMatrix)
 		self.m_targetLabel = np.array(label)
 
-		self.m_transferLabel = np.array(transferLabel)
+		self.m_transferLabel0 = np.array(transferLabel0)
+		self.m_transferLabel1 = np.array(transferLabel1)
 
 		self.m_randomForest = 0
 		self.m_tao = 0
@@ -77,7 +78,9 @@ class _ProactiveLearning:
 		self.m_AInv = 0
 		self.m_cbRate = 0.002 ##0.05
 
-		self.m_judgeClassifier = 0
+		# self.m_judgeClassifier = 0
+		self.m_auditor0 = None
+		self.m_auditor1 = None
 		self.m_clf = 0
 
 		self.m_weakLabeledIDList = []
@@ -201,38 +204,58 @@ class _ProactiveLearning:
 		cbProb = sigmoid(rawProb-self.m_cbRate*CB)
 		# print("cbProb\t", cbProb)
 		if cbProb > judgeProbThreshold:
-			return True
+			return True, cbProb
 		else:
-			return False
+			return False, cbProb
 
-	def get_transfer_flag(self, transferFeatureList, transferFlagList, exId, judgeRound):
+	def get_transfer_flag(self, transferFeatureList, transferFlagList0, transferFlagList1, exId, judgeRound):
 		# predLabel = self.m_randomForest.predict(self.m_targetDataFeature[exId].reshape(1, -1))[0]
-		predLabel = self.m_transferLabel[exId]
 
-		if len(np.unique(transferFlagList)) > 1:
-			self.m_judgeClassifier.fit(np.array(transferFeatureList), np.array(transferFlagList))
+		transferLabel0_exId = self.m_transferLabel0[exId]
+		transferLabel1_exId = self.m_transferLabel1[exId]
+
+		predLabel = -1
+		if len(np.unique(transferFlagList0)) > 1:
+			if len(np.unique(transferFlagList1)) > 1:
+				self.m_auditor0.fit(np.array(transferFeatureList), np.array(transferFlagList0))
+				self.m_auditor1.fit(np.array(transferFeatureList), np.array(transferFlagList1))
+			else:
+				return False, -1, predLabel
 		else:
-			return False, predLabel
+			return False, -1, predLabel
 
 		CB = self.get_judge_confidence_bound(exId)
 
-		transferFlag = self.get_judgeClassifier_prob(self.m_judgeClassifier.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		transferFlag0, LCB0 = self.get_judgeClassifier_prob(self.m_auditor0.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		transferFlag1, LCB1 = self.get_judgeClassifier_prob(self.m_auditor1.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
 
-		if transferFlag:
-			return True, predLabel
+		if transferFlag0:
+			if transferFlag1:
+				if LCB1 > LCB0:
+					return True, 1, transferLabel1_exId
+				else:
+					return True, 0, transferLabel0_exId
+			else:
+				return True, 0, transferLabel0_exId
 		else:
-			return False, predLabel
+			if transferFlag1:
+				return True, 1, transferLabel1_exId
 
-	def getAuditorMetric(self, transferFeatureList, transferFlagList, transferFeatureTest, transferLabelTest, targetLabelTest):
+			else:
+				return False, -1, predLabel
+
+	def getAuditorMetric(self, transferFeatureList, transferFlagList0, transferFlagList1, transferFeatureTest, transferLabelTest, targetLabelTest):
 		acc = 0.0
-		if len(np.unique(transferFlagList)) > 1:
-			self.m_judgeClassifier.fit(np.array(transferFeatureList), np.array(transferFlagList))
+		# if len(np.unique(transferFlagList0)) > 1:
+		# 	if len(np.unique(transferFlagList1)) > 1:
+		# 		self.m_auditor0.fit(np.array(transferFeatureList), np.array(transferFlagList0))
+		# 		self.m_auditor1.fit(np.array(transferFeatureList), np.array(transferFlagList1))
 
-			auditorLabelTest = (transferLabelTest==targetLabelTest)
+		# 	auditorLabelTest = (transferLabelTest==targetLabelTest)
 
-			predictAuditorLabelTest = self.m_judgeClassifier.predict(transferFeatureTest)
+		# 	predictAuditorLabelTest = self.m_judgeClassifier.predict(transferFeatureTest)
 
-			acc = accuracy_score(auditorLabelTest, predictAuditorLabelTest)
+		# 	acc = accuracy_score(auditorLabelTest, predictAuditorLabelTest)
 
 		return acc
 		
@@ -295,7 +318,8 @@ class _ProactiveLearning:
 		for foldIndex in range(foldNum):
 			
 			self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3)
-			self.m_judgeClassifier = LR(random_state=3)
+			self.m_auditor0 = LR(random_state=3)
+			self.m_auditor1 = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -314,7 +338,9 @@ class _ProactiveLearning:
 			targetNameFeatureTest = self.m_targetNameFeature[test]
 			targetLabelTest = self.m_targetLabel[test]
 
-			transferLabelTest = self.m_transferLabel[test]
+			# transferLabelTest = self.m_transferLabel[test]
+			transferLabelTest = []
+
 		
 			initExList = []
 			initExList = self.pretrainSelectInit(train)
@@ -336,7 +362,8 @@ class _ProactiveLearning:
 			activeLabelNum = 3.0
 			transferLabelNum = 0.0
 			transferFeatureList = []
-			transferFlagList = []
+			transferFlagList0 = []
+			transferFlagList1 = []
 
 			featureDim = len(targetNameFeatureTrain[0])
 			self.init_confidence_bound(featureDim, labeledExList, unlabeledExList)
@@ -365,12 +392,12 @@ class _ProactiveLearning:
 
 				# print(idx)
 				activeLabelFlag = False
-				transferLabelFlag, transferLabel = self.get_transfer_flag(transferFeatureList, transferFlagList, exId, activeLabelNum)
+				transferLabelFlag, weakOracleIndex, transferLabel = self.get_transfer_flag(transferFeatureList, transferFlagList0, transferFlagList1, exId, activeLabelNum)
 
 				exLabel = -1
 				if transferLabelFlag:
 					self.m_weakLabeledIDList.append(exId)
-					print("queryIter\t", queryIter)
+					
 					transferLabelNum += 1.0
 					activeLabelFlag = False
 					
@@ -382,6 +409,7 @@ class _ProactiveLearning:
 
 					if exLabel == self.m_targetLabel[exId]:
 						correctTransferLabelNum += 1.0
+						print("queryIter\t", queryIter)
 					else:
 						wrongTransferLabelNum += 1.0
 						print("query iteration", queryIter, "error transfer label\t", exLabel, "true label", self.m_targetLabel[exId])
@@ -397,16 +425,26 @@ class _ProactiveLearning:
 					# targetNameFeatureIter.append(self.m_targetNameFeature[exId])
 					# targetLabelIter.append(exLabel)
 
-					if transferLabel == exLabel:
+					weakLabel0 = self.m_transferLabel0[exId]
+					weakLabel1 = self.m_transferLabel1[exId]
+					
+					transferFeatureList.append(self.m_targetNameFeature[exId])
+
+					if weakLabel0 == exLabel:
 						correctUntransferLabelNum += 1.0
-						transferFlagList.append(1.0)
-						transferFeatureList.append(self.m_targetNameFeature[exId])
+						transferFlagList0.append(1.0)
 					else:
 						wrongUntransferLabelNum += 1.0
-						transferFlagList.append(0.0)
-						transferFeatureList.append(self.m_targetNameFeature[exId])
+						transferFlagList0.append(0.0)
 
-					auditorAcc = self.getAuditorMetric(transferFeatureList, transferFlagList, targetNameFeatureTest, transferLabelTest, targetLabelTest)
+					if weakLabel1 == exLabel:
+						correctUntransferLabelNum += 1.0
+						transferFlagList1.append(1.0)
+					else:
+						wrongUntransferLabelNum += 1.0
+						transferFlagList1.append(0.0)
+
+					auditorAcc = self.getAuditorMetric(transferFeatureList, transferFlagList0, transferFlagList1, targetNameFeatureTest, transferLabelTest, targetLabelTest)
 					print("auditorAcc", auditorAcc)
 
 					auditorAccList.append(auditorAcc)
@@ -556,19 +594,24 @@ if __name__ == "__main__":
 
 	featureMatrix, labelList = readSensorData()
 
-	transferLabelFile = "../../dataset/sensorType/sdh_rice/transferLabel_sdh--rice.txt"
-	auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
+	transferLabelFile0 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+	auditorLabelList0, transferLabelList0 = readTransferLabel(transferLabelFile)
+
+	transferLabelFile1 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_soda--rice.txt"
+	auditorLabelList1, transferLabelList1 = readTransferLabel(transferLabelFile)
 
 	featureMatrix = np.array(featureMatrix)
 	labelArray = np.array(labelList)
 
-	transferLabelArray = np.array(transferLabelList)
-	print("number of types", len(set(labelArray)))
-	print 'class count of true labels of all ex:\n', ct(transferLabelArray)
+	transferLabelArray0 = np.array(transferLabelList0)
+	print 'class count of true labels of all ex:\n', ct(transferLabelArray0)
+
+	transferLabelArray1 = np.array(transferLabelList1)
+	print 'class count of true labels of all ex:\n', ct(transferLabelArray1)
 
 	fold = 10
 	rounds = 150
 
-	al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray)
+	al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray0, transferLabelArray1)
 
 	al.run_CV()

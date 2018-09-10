@@ -1,5 +1,5 @@
 """
-active learning with random initialization and least confidence query strategy
+active learning with random initialization and CB query strategy
 """
 
 import numpy as np
@@ -29,7 +29,10 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "electronics"
+"""
+electronics, sensor_rice
+"""
+dataName = "sensor_rice"
 
 modelName = "activeLearning_CB_"+dataName
 timeStamp = datetime.now()
@@ -122,23 +125,25 @@ class active_learning:
 		# print debug
 		return acc
 
-	def pretrainSelectInit(self, train):
+	def pretrainSelectInit(self, train, foldIndex):
+		
+		initTotalList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
+		initList = initTotalList[foldIndex]
+		# posTrain = []
+		# negTrain = []
 
-		posTrain = []
-		negTrain = []
+		# for trainIndex in range(len(train)):
+		# 	if self.label[train[trainIndex]] == 1.0:
+		# 		posTrain.append(train[trainIndex])
+		# 	else:
+		# 		negTrain.append(train[trainIndex])
 
-		for trainIndex in range(len(train)):
-			if self.label[train[trainIndex]] == 1.0:
-				posTrain.append(train[trainIndex])
-			else:
-				negTrain.append(train[trainIndex])
+		# initList = []
 
-		initList = []
+		# random.seed(10)
 
-		random.seed(10)
-
-		initList += random.sample(posTrain, 2)
-		initList += random.sample(negTrain, 1)
+		# initList += random.sample(posTrain, 2)
+		# initList += random.sample(negTrain, 1)
 
 		# initList += posTrain[:2]
 		# initList += negTrain[:1]
@@ -177,7 +182,8 @@ class active_learning:
 		for foldIndex in range(foldNum):
 			# self.clf = LinearSVC(random_state=3)
 
-			self.clf = LR(random_state=3)
+			# self.clf = LR(random_state=3)
+			self.clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -198,7 +204,7 @@ class active_learning:
 			self.init_confidence_bound(featureDim)
 			
 			initExList = []
-			initExList = self.pretrainSelectInit(train)
+			initExList = self.pretrainSelectInit(train, foldIndex)
 			# initExList = [234, 366, 183]
 			# initExList = [171, 283, 285]
 			# random.seed(110)
@@ -273,33 +279,130 @@ class active_learning:
 			f.write("\n")
 		f.close()
 
-if __name__ == "__main__":
+def readTransferLabel(transferLabelFile):
+	f = open(transferLabelFile)
 
-	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	auditorLabelList = []
+	transferLabelList = []
+	trueLabelList = []
 
-	# featureLabelFile = "../../dataset/processed_acl/processedKitchenElectronics/"+dataName
-	# featureLabelFile = "../simulatedFeatureLabel_"+str(sampleNum)+"_"+str(featureDim)+"_"+str(classifierNum)+".txt"
-	f = open(featureLabelFile)
-	# f = open('./simulatedFeatureLabel_500.txt')
-	featureMatrix = []
-	label = []
 	for rawLine in f:
-		featureLine = rawLine.strip().split("\t")
-		featureNum = len(featureLine)
-		featureList = []
-		for featureIndex in range(featureNum-1):
-			featureVal = float(featureLine[featureIndex])
-			featureList.append(featureVal)
+		
+		if "transfer" in rawLine:
+			continue
+		
+		line = rawLine.strip().split("\t")
+		lineLen = len(line)
 
-		labelVal = float(featureLine[featureNum-1])
-
-		featureMatrix.append(featureList)
-		label.append(labelVal)
+		auditorLabelList.append(float(line[0]))
+		transferLabelList.append(float(line[1]))
+		trueLabelList.append(float(line[2]))
 
 	f.close()
 
+	return auditorLabelList, transferLabelList, trueLabelList
+
+def readFeatureLabelCSV(csvFile):
+    f = open(csvFile)
+
+    firstLine = False
+
+    featureMatrix = []
+    label = []
+
+    firstLine = f.readline()
+    
+    posFeatureMatrix = []
+    posLabel = []
+    negFeatureMatrix = []
+    negLabel = []
+
+    for rawLine in f:
+        line = rawLine.strip().split(",")
+        lineLen = len(line)
+
+        featureList = []
+        for lineIndex in range(lineLen-1):
+            featureVal = float(line[lineIndex])
+            featureList.append(featureVal)
+
+#         featureMatrix.append(featureList)
+        if line[lineLen-1] == "FALSE":
+            negFeatureMatrix.append(featureList)
+            negLabel.append(0.0)
+        else:
+            posFeatureMatrix.append(featureList)
+            # print(line[lineLen-1])
+            posLabel.append(1.0)
+    
+    negFeatureMatrix = random.sample(negFeatureMatrix, len(posLabel))
+    negLabel = random.sample(negLabel, len(posLabel))
+    
+    featureMatrix = np.vstack((negFeatureMatrix, posFeatureMatrix))
+    label = np.hstack((negLabel, posLabel))
+    
+    f.close()
+
+    return featureMatrix, label
+
+def readFeatureLabel(featureLabelFile):
+	f = open(featureLabelFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen-1):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+
+		labelList.append(float(line[lineLen-1]))
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
+def readSensorData():
+	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
+	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
+	label = tmp[:,-1]
+
+	fn = get_name_features(raw_pt)
+
+	featureMatrix = fn
+	labelList = label
+
+	return featureMatrix, labelList
+
+if __name__ == "__main__":
+
+	"""
+	 	processedKitchenElectronics
+	"""
+	# featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+
+	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+	"""
+	 	sensor type
+	"""
+	featureMatrix, labelList = readSensorData()
+
+	transferLabelFile0 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+	auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+	featureMatrix = np.array(featureMatrix)
+	labelArray = np.array(trueLabelList)
+
 	fold = 10
-	rounds = 100
-	al = active_learning(fold, rounds, featureMatrix, label)
+	rounds = 150
+	al = active_learning(fold, rounds, featureMatrix, labelArray)
 
 	al.run_CV()

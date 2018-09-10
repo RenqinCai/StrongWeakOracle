@@ -31,7 +31,7 @@ from datetime import datetime
 """
 electronics, sensor_rice
 """
-dataName = "sensor_rice"
+dataName = "electronics"
 
 modelName = "margin_linearAuditor_"+dataName
 timeStamp = datetime.now()
@@ -294,7 +294,7 @@ class _ProactiveLearning:
 
 		for foldIndex in range(foldNum):
 			
-			self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3)
+			self.m_clf = LR(random_state=3)
 			self.m_judgeClassifier = LR(random_state=3)
 
 			train = []
@@ -543,21 +543,17 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	# raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('./selectedNameFeature4Label_5types.txt').readlines()]
 
-	# raw_pt = [i.strip().split('\t')[:-1] for i in open().readlines()]
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-	# f = open('../simulatedFeatureLabel_500_100_2.txt')
-	# featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
-	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
-
-	# transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-	# auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
-
-	featureMatrix, labelList = readSensorData()
-
-	transferLabelFile = "../../dataset/sensorType/sdh_rice/transferLabel_sdh--rice.txt"
+	transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
 	auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
+
+	# featureMatrix, labelList = readSensorData()
+	
+	# transferLabelFile = "../../dataset/sensorType/sdh_rice/transferLabel_sdh--rice.txt"
+	# auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
 
 	featureMatrix = np.array(featureMatrix)
 	labelArray = np.array(labelList)

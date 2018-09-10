@@ -1,5 +1,5 @@
 """
-proactive learning with random initialization, judge classifier to judge whether transfer learning is correct. 
+proactive learning with random initialization, judge classifier to judge whether transfer learning is correct. LUCB when querying instance
 """
 import matplotlib.pyplot as plt
 import math
@@ -28,9 +28,12 @@ from sklearn.preprocessing import normalize
 
 from datetime import datetime
 
-dataName = "electronics"
+"""
+electronics, sensor_rice
+"""
+dataName = "sensor_rice"
 
-modelName = "LUCB_"+dataName
+modelName = "proactive_LUCB_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -589,23 +592,30 @@ def readFeatureLabel(featureLabelFile):
 
 if __name__ == "__main__":
 
-	# raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('./selectedNameFeature4Label_5types.txt').readlines()]
+	"""
+	electronics
+	"""
+	
+	# featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-	# raw_pt = [i.strip().split('\t')[:-1] for i in open().readlines()]
+	# transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+	# auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
 
-	# f = open('../simulatedFeatureLabel_500_100_2.txt')
-	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
-	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+	"""
+	 	sensor type
+	"""
+	featureMatrix, labelList = readSensorData()
 
 	featureMatrix = np.array(featureMatrix)
 	labelArray = np.array(labelList)
 
-	transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-	auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
+	
 
 	transferLabelArray = np.array(transferLabelList)
 	print("number of types", len(set(labelArray)))
-	print 'class count of true labels of all ex:\n', ct(transferLabelArray)
+	print('class count of true labels of all ex:\n', ct(transferLabelArray))
+
 
 	fold = 10
 	rounds = 150
