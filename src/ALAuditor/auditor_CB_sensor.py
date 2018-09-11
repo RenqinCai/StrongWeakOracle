@@ -1,5 +1,5 @@
 """
-active learning with random initialization and random query strategy
+active learning with random initialization and CB query strategy
 """
 
 import numpy as np
@@ -33,6 +33,8 @@ import os
 """
 electronics, sensor_rice
 """
+# dataName = "sensor_rice"
+
 
 
 random.seed(10)
@@ -82,10 +84,35 @@ class active_learning:
 	def select_example(self, unlabeled_list):
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
-		
-		selectedID = random.sample(unlabeled_list, 1)[0]
 
-		return selectedID
+		for unlabeledIdIndex in range(unlabeledIdNum):
+			unlabeledId = unlabeled_list[unlabeledIdIndex]
+			# print("unlabeledId\t", unlabeledId)
+			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+
+			selectCB = self.get_select_confidence_bound(unlabeledId)
+
+			idScore = selectCB
+			
+			unlabeledIdScoreMap[unlabeledId] = idScore
+
+		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
+
+		return sortedUnlabeledIdList[0]
+
+	def init_confidence_bound(self, featureDim):
+		self.m_selectA = self.m_lambda*np.identity(featureDim)
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def update_select_confidence_bound(self, exId):
+		# print("updating select cb", exId)
+		self.m_selectA += np.outer(self.fn[exId], self.fn[exId])
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def get_select_confidence_bound(self, exId):
+		CB = np.sqrt(np.dot(np.dot(self.fn[exId], self.m_selectAInv), self.fn[exId]))
+
+		return CB
 
 	def get_pred_acc(self, fn_test, label_test, labeled_list):
 
@@ -96,31 +123,18 @@ class active_learning:
 		fn_preds = self.m_clf.predict(fn_test)
 
 		acc = accuracy_score(label_test, fn_preds)
-	
+		# print("acc\t", acc)
+		# print debug
 		return acc
 
 	def pretrainSelectInit(self, train, foldIndex):
-
-		if len(self.m_initialExList) == 0:
-			sampledLabels = []
-			sampledInstances = []
-			while len(set(sampledLabels)) < 2:
-				sampledInstances = random.sample(train, 3)
-				sampledLabels = self.label[sampledInstances]
-
-			initList = sampledInstances
-
-		# initList = initTotalList[foldIndex]
-
-			print("initList", initList)
-
-			return initList
-		else:
-			initList = self.m_initialExList[foldIndex]
 		
-			print("initList", initList)
+		initList = self.m_initialExList[foldIndex]
+		
+		print("initList", initList)
 
-			return initList
+		return initList
+
 
 	def run_CV(self):
 
@@ -131,6 +145,7 @@ class active_learning:
 		indexList = [i for i in range(totalInstanceNum)]
 
 		totalTransferNumList = []
+		# np.random.seed(3)
 		random.shuffle(indexList)
 
 		foldNum = 10
@@ -143,19 +158,16 @@ class active_learning:
 
 		foldIndexInstanceList = indexList[foldInstanceNum*(foldNum-1):]
 		foldInstanceList.append(foldIndexInstanceList)
-
+		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		cvIter = 0
 		totalAccList = [[] for i in range(10)]
+		totalNewClassFlagList = [[] for i in range(10)]
 		for foldIndex in range(foldNum):
-			# self.clf = LinearSVC(random_state=3)
-			# self.clf = LR(fit_intercept=False)
-			# self.clf = LR(random_state=3)
 
 			if self.m_multipleClass:
 				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
 			else:
 				self.m_clf = LR(random_state=3)
-
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -166,16 +178,16 @@ class active_learning:
 			fn_train = self.fn[train]
 
 			test = foldInstanceList[foldIndex]
+		
 			fn_test = self.fn[test]
 			label_test = self.label[test]
+
+			featureDim = len(fn_train[0])
+			self.init_confidence_bound(featureDim)
 			
-		
 			initExList = []
 			initExList = self.pretrainSelectInit(train, foldIndex)
-			# initExList = [316, 68, 495]
 			
-			# random.seed(110)
-			# initExList = random.sample(train, 3)
 			fn_init = self.fn[initExList]
 			label_init = self.label[initExList]
 
@@ -183,7 +195,7 @@ class active_learning:
 			queryIter = 3
 			labeledExList = []
 			unlabeledExList = []
-			###labeled index
+			
 			labeledExList.extend(initExList)
 			unlabeledExList = list(set(train)-set(labeledExList))
 
@@ -197,9 +209,9 @@ class active_learning:
 				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
+				self.update_select_confidence_bound(idx)
 				# print(queryIter, "idx", idx, self.label[idx])
 				# self.update_select_confidence_bound(idx)
-			
 
 				labeledExList.append(idx)
 				unlabeledExList.remove(idx)
@@ -209,10 +221,10 @@ class active_learning:
 				queryIter += 1
 
 			cvIter += 1      
-		
-
+			
 		totalACCFile = modelVersion+"_acc.txt"
 		totalACCFile = os.path.join(fileSrc, totalACCFile)
+
 
 		f = open(totalACCFile, "w")
 		for i in range(10):
@@ -221,6 +233,7 @@ class active_learning:
 				f.write(str(totalAccList[i][j])+"\t")
 			f.write("\n")
 		f.close()
+
 
 def readTransferLabel(transferLabelFile):
 	f = open(transferLabelFile)
@@ -328,7 +341,7 @@ if __name__ == "__main__":
 
 	dataName = "sensor_rice"
 
-	modelName = "activeLearning_random_"+dataName
+	modelName = "activeLearning_CB_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -339,7 +352,7 @@ if __name__ == "__main__":
 	 	processedKitchenElectronics
 	"""
 	if dataName == "electronics":
-		
+
 		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
@@ -378,6 +391,7 @@ if __name__ == "__main__":
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(trueLabelList)
+
 		auditorLabelArray = np.array(auditorLabelList0)
 
 		initialExList = []
@@ -386,7 +400,7 @@ if __name__ == "__main__":
 		fold = 10
 		rounds = 150
 
-		multipleClassFlag = True
+		multipleClassFlag = False
 		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
