@@ -1,5 +1,5 @@
 """
-active learning with random initialization and least confidence query strategy
+active learning with random initialization and CB query strategy
 """
 
 import numpy as np
@@ -33,6 +33,8 @@ import os
 """
 electronics, sensor_rice
 """
+# dataName = "sensor_rice"
+
 
 
 random.seed(10)
@@ -79,21 +81,19 @@ class active_learning:
 	def setInitialExList(self, initialExList):
 		self.m_initialExList = initialExList
 
-
 	def select_example(self, unlabeled_list):
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
 
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
+			# print("unlabeledId\t", unlabeledId)
 			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
 
-			sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
-			maxLabelPredictProb = sortedLabelPredictProb[0]
-			subMaxLabelPredictProb = sortedLabelPredictProb[1]
-			marginProb = maxLabelPredictProb-subMaxLabelPredictProb
-			idScore = -marginProb
+			selectCB = self.get_select_confidence_bound(unlabeledId)
 
+			idScore = selectCB
+			
 			unlabeledIdScoreMap[unlabeledId] = idScore
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
@@ -123,7 +123,8 @@ class active_learning:
 		fn_preds = self.m_clf.predict(fn_test)
 
 		acc = accuracy_score(label_test, fn_preds)
-	
+		# print("acc\t", acc)
+		# print debug
 		return acc
 
 	def pretrainSelectInit(self, train, foldIndex):
@@ -134,6 +135,7 @@ class active_learning:
 
 		return initList
 
+
 	def run_CV(self):
 
 		cvIter = 0
@@ -143,7 +145,7 @@ class active_learning:
 		indexList = [i for i in range(totalInstanceNum)]
 
 		totalTransferNumList = []
-		
+		# np.random.seed(3)
 		random.shuffle(indexList)
 
 		foldNum = 10
@@ -159,12 +161,8 @@ class active_learning:
 		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		cvIter = 0
 		totalAccList = [[] for i in range(10)]
+		totalNewClassFlagList = [[] for i in range(10)]
 		for foldIndex in range(foldNum):
-			# self.clf = LinearSVC(random_state=3)
-			# self.clf = LR(random_state=3, fit_intercept=False)
-
-			# self.clf = LR(fit_intercept=False)
-			# self.clf = LR(random_state=3)
 
 			if self.m_multipleClass:
 				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
@@ -174,24 +172,22 @@ class active_learning:
 			train = []
 			for preFoldIndex in range(foldIndex):
 				train.extend(foldInstanceList[preFoldIndex])
-
-			test = foldInstanceList[foldIndex]
 			for postFoldIndex in range(foldIndex+1, foldNum):
 				train.extend(foldInstanceList[postFoldIndex])
 
-			# print("testing", ct(self.label[test]))
-			trainNum = int(totalInstanceNum*0.9)
-			
+			fn_train = self.fn[train]
+
+			test = foldInstanceList[foldIndex]
+		
 			fn_test = self.fn[test]
 			label_test = self.label[test]
 
-			fn_train = self.fn[train]
-
+			featureDim = len(fn_train[0])
+			self.init_confidence_bound(featureDim)
+			
 			initExList = []
 			initExList = self.pretrainSelectInit(train, foldIndex)
-
-			# random.seed(20)
-			# initExList = random.sample(train, 3)
+			
 			fn_init = self.fn[initExList]
 			label_init = self.label[initExList]
 
@@ -199,7 +195,7 @@ class active_learning:
 			queryIter = 3
 			labeledExList = []
 			unlabeledExList = []
-			###labeled index
+			
 			labeledExList.extend(initExList)
 			unlabeledExList = list(set(train)-set(labeledExList))
 
@@ -213,6 +209,7 @@ class active_learning:
 				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
+				self.update_select_confidence_bound(idx)
 				# print(queryIter, "idx", idx, self.label[idx])
 				# self.update_select_confidence_bound(idx)
 
@@ -228,6 +225,7 @@ class active_learning:
 		totalACCFile = modelVersion+"_acc.txt"
 		totalACCFile = os.path.join(fileSrc, totalACCFile)
 
+
 		f = open(totalACCFile, "w")
 		for i in range(10):
 			totalAlNum = len(totalAccList[i])
@@ -235,6 +233,7 @@ class active_learning:
 				f.write(str(totalAccList[i][j])+"\t")
 			f.write("\n")
 		f.close()
+
 
 def readTransferLabel(transferLabelFile):
 	f = open(transferLabelFile)
@@ -340,9 +339,9 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "sensor_rice"
 
-	modelName = "activeLearning_margin_"+dataName
+	modelName = "activeLearning_CB_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -371,7 +370,6 @@ if __name__ == "__main__":
 		al.setInitialExList(initialExList)
 
 		al.run_CV()
-
 
 	"""
 	 	sensor type

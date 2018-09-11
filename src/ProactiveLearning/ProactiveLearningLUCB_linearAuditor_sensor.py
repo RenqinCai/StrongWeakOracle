@@ -101,35 +101,12 @@ class _ProactiveLearning:
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			
-			idScore = self.getMargin(unlabeledId)
+			idScore = self.getLUCB(unlabeledId)
 			unlabeledIdScoreMap[unlabeledId] = idScore
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
 		return sortedUnlabeledIdList[0]
-
-
-	def getMargin(self, unlabeledId):
-		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
-
-		labelProbMap = {} ##labelIndex: labelProb
-		labelNum = len(labelPredictProb)
-		for labelIndex in range(labelNum):
-			labelProbMap.setdefault(labelIndex, labelPredictProb[labelIndex])
-
-		sortedLabelIndexList = sorted(labelProbMap, key=labelProbMap.__getitem__, reverse=True)
-
-		maxLabelIndex = sortedLabelIndexList[0]
-		subMaxLabelIndex = sortedLabelIndexList[1]
-
-		maxLabelProb = labelProbMap[maxLabelIndex]
-		subMaxLabelProb = labelProbMap[subMaxLabelIndex]
-
-		margin = maxLabelProb-subMaxLabelProb
-
-		margin = 0 - margin
-
-		return margin
 
 	def getLUCB(self, unlabeledId):
 		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
@@ -585,8 +562,8 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
-	modelName = "Proactive_margin_linear_"+dataName
+	dataName = "sensor_rice"
+	modelName = "Proactive_LUCB_linear_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -602,7 +579,7 @@ if __name__ == "__main__":
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+		auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)

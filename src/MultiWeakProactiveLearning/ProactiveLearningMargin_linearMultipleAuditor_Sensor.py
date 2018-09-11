@@ -197,9 +197,9 @@ class _ProactiveLearning:
 
 		return CB
 
-	def get_judgeClassifier_prob(self, judgeParam, feature, CB, judgeRound):
+	def get_judgeClassifier_prob(self, judgeParam, feature, CB, judgeRound, judgeThreshold):
 		rawProb = np.dot(judgeParam, np.transpose(feature))
-		judgeProbThreshold = 0.65
+		judgeProbThreshold = judgeThreshold
 
 		cbProb = sigmoid(rawProb-self.m_cbRate*CB)
 		# print("cbProb\t", cbProb)
@@ -208,11 +208,24 @@ class _ProactiveLearning:
 		else:
 			return False, cbProb
 
+
+	def getAuditorProb(self, judgeParam, feature, CB, judgeRound):
+		rawProb = np.dot(judgeParam, np.transpose(feature))
+
+		cbProb = sigmoid(rawProb-self.m_cbRate*CB)
+
+		return cbProb
+
+
 	def get_transfer_flag(self, transferFeatureList, transferFlagList0, transferFlagList1, exId, judgeRound):
 		# predLabel = self.m_randomForest.predict(self.m_targetDataFeature[exId].reshape(1, -1))[0]
 
 		transferLabel0_exId = self.m_transferLabel0[exId]
 		transferLabel1_exId = self.m_transferLabel1[exId]
+
+		transferLabelList = []
+		transferLabelList.append(transferLabel0_exId)
+		transferLabelList.append(transferLabel1_exId)
 
 		predLabel = -1
 		if len(np.unique(transferFlagList0)) > 1:
@@ -226,23 +239,48 @@ class _ProactiveLearning:
 
 		CB = self.get_judge_confidence_bound(exId)
 
-		transferFlag0, LCB0 = self.get_judgeClassifier_prob(self.m_auditor0.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
-		transferFlag1, LCB1 = self.get_judgeClassifier_prob(self.m_auditor1.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		cbProbList = []
+		cbProb0 = self.getAuditorProb(self.m_auditor0.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		cbProbList.append(cbProb0)
 
-		if transferFlag0:
-			if transferFlag1:
-				if LCB1 > LCB0:
-					return True, 1, transferLabel1_exId
-				else:
-					return True, 0, transferLabel0_exId
+		cbProb1 = self.getAuditorProb(self.m_auditor1.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		cbProbList.append(cbProb1)
+
+		maxCbProbIndex = np.argmax(np.array(cbProbList))
+		maxCbProb = cbProbList[maxCbProbIndex]
+
+		judgeThresholdSame = 0.7
+		judgeThresholdDiff = 0.85
+
+		if transferLabel0_exId == transferLabel1_exId:
+			if maxCbProb > judgeThresholdSame:
+				return True, maxCbProbIndex, transferLabelList[maxCbProbIndex]
 			else:
-				return True, 0, transferLabel0_exId
+				return False, -1, -1
 		else:
-			if transferFlag1:
-				return True, 1, transferLabel1_exId
-
+			if maxCbProb > judgeThresholdDiff:
+				return True, maxCbProbIndex, transferLabelList[maxCbProbIndex]
 			else:
-				return False, -1, predLabel
+				return False, -1, -1
+
+
+		# transferFlag0, LCB0 = self.get_judgeClassifier_prob(self.m_auditor0.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		# transferFlag1, LCB1 = self.get_judgeClassifier_prob(self.m_auditor1.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+
+		# if transferFlag0:
+		# 	if transferFlag1:
+		# 		if LCB1 > LCB0:
+		# 			return True, 1, transferLabel1_exId
+		# 		else:
+		# 			return True, 0, transferLabel0_exId
+		# 	else:
+		# 		return True, 0, transferLabel0_exId
+		# else:
+		# 	if transferFlag1:
+		# 		return True, 1, transferLabel1_exId
+
+		# 	else:
+		# 		return False, -1, predLabel
 
 	def getAuditorMetric(self, transferFeatureList, transferFlagList0, transferFlagList1, transferFeatureTest, transferLabelTest, targetLabelTest):
 		acc = 0.0

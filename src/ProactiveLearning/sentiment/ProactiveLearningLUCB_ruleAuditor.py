@@ -1,5 +1,5 @@
 """
-proactive learning LUCB with random initialization, judge classifier to judge whether transfer learning is correct. LUCB as query strategy
+proactive learning with random initialization, rule based auditor judge whether the transferred label is correct or not
 """
 import matplotlib.pyplot as plt
 import math
@@ -27,15 +27,14 @@ from sklearn.metrics import confusion_matrix as CM
 from sklearn.preprocessing import normalize
 
 from datetime import datetime
-import os
 
-# dataName = "electronics"
+dataName = "electronics"
 
-# modelName = "LUCB_linearAuditor_"+dataName
-# timeStamp = datetime.now()
-# timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
+modelName = "LUCB_ruleAuditor_"+dataName
+timeStamp = datetime.now()
+timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
-# modelVersion = modelName+"_"+timeStamp
+modelVersion = modelName+"_"+timeStamp
 # random.seed(3)
 
 def get_name_features(names):
@@ -55,15 +54,10 @@ def sigmoid(x):
 
 class _ProactiveLearning:
 
-	def __init__(self, fold, rounds, featureMatrix, label, transferLabel, category, multipleClass):
+	def __init__(self, fold, rounds, featureMatrix, label, transferLabel):
 
 		self.m_fold = fold
 		self.m_rounds = rounds
-
-		self.m_category = category
-		print("category", category)
-		self.m_multipleClass = multipleClass
-		print("multipleClass", multipleClass)
 
 		self.m_targetNameFeature = np.array(featureMatrix)
 		self.m_targetLabel = np.array(label)
@@ -82,13 +76,11 @@ class _ProactiveLearning:
 
 		self.m_judgeClassifier = 0
 		self.m_clf = 0
+		self.m_weakOracle = None
 
 		self.m_weakLabeledIDList = []
 		self.m_strongLabeledIDList = []
 		self.m_unlabeledIDList = []
-
-	def setInitialExList(self, initialExList):
-		self.m_initialExList = initialExList
 
 	def select_example(self, unlabeled_list):
 
@@ -100,68 +92,32 @@ class _ProactiveLearning:
 
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
+			# print("unlabeledId\t", unlabeledId)
+			labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
+
+			labelIndexMap = {} ##labelIndex: labelProb
+			labelNum = len(labelPredictProb)
+			for labelIndex in range(labelNum):
+				labelIndexMap.setdefault(labelIndex, labelPredictProb[labelIndex])
+
+			sortedLabelIndexList = sorted(labelIndexMap, key=labelIndexMap.__getitem__, reverse=True)
+
+			maxLabelIndex = sortedLabelIndexList[0]
+			subMaxLabelIndex = sortedLabelIndexList[1]
+
+			selectCB = self.get_select_confidence_bound(unlabeledId)
+
+			coefDiff = 0
 			
-			idScore = self.getMargin(unlabeledId)
+			coefDiff = np.abs(np.dot(self.m_clf.coef_, self.m_targetNameFeature[unlabeledId]))
+
+			LCB = coefDiff-2*0.002*selectCB
+			idScore = 1-LCB
 			unlabeledIdScoreMap[unlabeledId] = idScore
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
 		return sortedUnlabeledIdList[0]
-
-
-	def getMargin(self, unlabeledId):
-		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
-
-		labelProbMap = {} ##labelIndex: labelProb
-		labelNum = len(labelPredictProb)
-		for labelIndex in range(labelNum):
-			labelProbMap.setdefault(labelIndex, labelPredictProb[labelIndex])
-
-		sortedLabelIndexList = sorted(labelProbMap, key=labelProbMap.__getitem__, reverse=True)
-
-		maxLabelIndex = sortedLabelIndexList[0]
-		subMaxLabelIndex = sortedLabelIndexList[1]
-
-		maxLabelProb = labelProbMap[maxLabelIndex]
-		subMaxLabelProb = labelProbMap[subMaxLabelIndex]
-
-		margin = maxLabelProb-subMaxLabelProb
-
-		margin = 0 - margin
-
-		return margin
-
-	def getLUCB(self, unlabeledId):
-		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
-
-		labelIndexMap = {} ##labelIndex: labelProb
-		labelNum = len(labelPredictProb)
-		for labelIndex in range(labelNum):
-			labelIndexMap.setdefault(labelIndex, labelPredictProb[labelIndex])
-
-		sortedLabelIndexList = sorted(labelIndexMap, key=labelIndexMap.__getitem__, reverse=True)
-
-		maxLabelIndex = sortedLabelIndexList[0]
-		subMaxLabelIndex = sortedLabelIndexList[1]
-
-		selectCB = self.get_select_confidence_bound(unlabeledId)
-
-		coefDiff = 0
-		
-		if self.m_multipleClass:
-			maxCoef = self.m_clf.coef_[maxLabelIndex]
-			subMaxCoef = self.m_clf.coef_[subMaxLabelIndex]
-			coefDiff = np.dot(maxCoef, self.m_targetNameFeature[unlabeledId])-np.dot(subMaxCoef, self.m_targetNameFeature[unlabeledId])
-			coefDiff += self.m_clf.intercept_[maxLabelIndex]-self.m_clf.intercept_[subMaxLabelIndex]
-		else:
-			coefDiff = np.dot(self.m_clf.coef_, self.m_targetNameFeature[unlabeledId])
-			coefDiff += self.m_clf.intercept_
-
-		coefDiff = np.abs(coefDiff)
-		LCB = coefDiff-2*0.002*selectCB
-		LUCB = 1-LCB
-
-		return LUCB
 
 	def get_pred_acc(self, targetNameFeatureTest, targetLabelTest, targetNameFeatureIter, targetLabelIter):
 
@@ -189,8 +145,8 @@ class _ProactiveLearning:
 		self.m_selectA = self.m_lambda*np.identity(featureDim)
 		self.m_selectAInv = np.linalg.inv(self.m_selectA)
 
-		self.m_judgeA = self.m_lambda*np.identity(featureDim)
-		self.m_judgeAInv = np.linalg.inv(self.m_judgeA)
+		# self.m_judgeA = self.m_lambda*np.identity(featureDim)
+		# self.m_judgeAInv = np.linalg.inv(self.m_judgeA)
 
 	def update_select_confidence_bound(self, exId):
 		# print("updating select cb", exId)
@@ -215,7 +171,7 @@ class _ProactiveLearning:
 
 	def get_judgeClassifier_prob(self, judgeParam, feature, CB, judgeRound):
 		rawProb = np.dot(judgeParam, np.transpose(feature))
-		judgeProbThreshold = 0.80
+		judgeProbThreshold = 0.65
 
 		cbProb = sigmoid(rawProb-self.m_cbRate*CB)
 		# print("cbProb\t", cbProb)
@@ -224,23 +180,35 @@ class _ProactiveLearning:
 		else:
 			return False
 
-	def get_transfer_flag(self, transferFeatureList, transferFlagList, exId, judgeRound):
+	def get_transfer_flag(self, exId):
 		# predLabel = self.m_randomForest.predict(self.m_targetDataFeature[exId].reshape(1, -1))[0]
-		predLabel = self.m_transferLabel[exId]
+		
+		feature = self.m_targetNameFeature[exId].reshape(1, -1)
 
-		if len(np.unique(transferFlagList)) > 1:
-			self.m_judgeClassifier.fit(np.array(transferFeatureList), np.array(transferFlagList))
-		else:
-			return False, predLabel
+		transferLabel4ExId = self.m_transferLabel[exId]
 
-		CB = self.get_judge_confidence_bound(exId)
+		auditorProb = np.dot(self.m_weakOracle.coef_, np.transpose(feature))
+		predProb = np.dot(self.m_clf.coef_, np.transpose(feature))
+		auditorProb = (2*predProb-1)*auditorProb
+		auditorProb = sigmoid(auditorProb)
 
-		transferFlag = self.get_judgeClassifier_prob(self.m_judgeClassifier.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
+		transferFlag = False
+		if auditorProb > 0.8:
+			transferFlag = True
+		
+		# if len(np.unique(transferFlagList)) > 1:
+		# 	self.m_judgeClassifier.fit(np.array(transferFeatureList), np.array(transferFlagList))
+		# else:
+		# 	return False, predLabel
+
+		# CB = self.get_judge_confidence_bound(exId)
+
+		# transferFlag = self.get_judgeClassifier_prob(self.m_judgeClassifier.coef_, self.m_targetNameFeature[exId].reshape(1, -1), CB, judgeRound)
 
 		if transferFlag:
-			return True, predLabel
+			return True, transferLabel4ExId
 		else:
-			return False, predLabel
+			return False, transferLabel4ExId
 
 	def getAuditorMetric(self, transferFeatureList, transferFlagList, transferFeatureTest, transferLabelTest, targetLabelTest):
 		acc = 0.0
@@ -255,10 +223,27 @@ class _ProactiveLearning:
 
 		return acc
 		
-	def pretrainSelectInit(self, train, foldIndex):
-		
-		initList = self.m_initialExList[foldIndex]
-		
+	def pretrainSelectInit(self, train):
+
+		posTrain = []
+		negTrain = []
+
+		for trainIndex in range(len(train)):
+			if self.m_targetLabel[train[trainIndex]] == 1.0:
+				posTrain.append(train[trainIndex])
+			else:
+				negTrain.append(train[trainIndex])
+
+		initList = []
+
+		random.seed(10)
+
+		initList += random.sample(posTrain, 2)
+		initList += random.sample(negTrain, 1)
+
+		# initList += posTrain[:2]
+		# initList += negTrain[:1]
+
 		print("initList", initList)
 
 		return initList
@@ -303,12 +288,10 @@ class _ProactiveLearning:
 		for foldIndex in range(foldNum):
 			
 			# self.clf = LinearSVC(random_state=3)
-			if self.m_multipleClass:
-				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
-			else:
-				self.m_clf = LR(random_state=3)
-			
+
+			self.m_clf = LR(random_state=3)
 			self.m_judgeClassifier = LR(random_state=3)
+			self.m_weakOracle = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -322,7 +305,9 @@ class _ProactiveLearning:
 
 			targetNameFeatureTrain = self.m_targetNameFeature[train]
 			targetLabelTrain = self.m_targetLabel[train]
-			# targetDataFeatureTrain = self.m_targetDataFeature[train]
+			transferLabelTrain = self.m_transferLabel[train]
+
+			self.m_weakOracle.fit(targetNameFeatureTrain, transferLabelTrain)
 
 			targetNameFeatureTest = self.m_targetNameFeature[test]
 			targetLabelTest = self.m_targetLabel[test]
@@ -333,8 +318,10 @@ class _ProactiveLearning:
 			# sourceUniqueClass = np.unique(self.m_sourceLabel)
 
 			initExList = []
-			initExList = self.pretrainSelectInit(train, foldIndex)
-		
+			initExList = self.pretrainSelectInit(train)
+			# random.seed(101)
+			# initExList = random.sample(train, 3)
+
 			targetNameFeatureInit = self.m_targetNameFeature[initExList]
 			targetLabelInit = self.m_targetLabel[initExList]
 
@@ -379,12 +366,11 @@ class _ProactiveLearning:
 
 				# print(idx)
 				activeLabelFlag = False
-				transferLabelFlag, transferLabel = self.get_transfer_flag(transferFeatureList, transferFlagList, exId, activeLabelNum)
+				transferLabelFlag, transferLabel = self.get_transfer_flag(exId)
 
 				exLabel = -1
 				if transferLabelFlag:
 					self.m_weakLabeledIDList.append(exId)
-					
 					transferLabelNum += 1.0
 					activeLabelFlag = False
 					
@@ -395,14 +381,14 @@ class _ProactiveLearning:
 					# targetLabelIter.append(exLabel)
 
 					if exLabel == self.m_targetLabel[exId]:
-						print("queryIter\t", queryIter)
 						correctTransferLabelNum += 1.0
+						print("queryIter\t", queryIter)
 					else:
 						wrongTransferLabelNum += 1.0
 						print("query iteration", queryIter, "error transfer label\t", exLabel, "true label", self.m_targetLabel[exId])
 				else:
 					self.m_strongLabeledIDList.append(exId)
-					self.update_judge_confidence_bound(exId)
+					# self.update_judge_confidence_bound(exId)
 					activeLabelNum += 1.0
 					activeLabelFlag = True
 
@@ -463,19 +449,24 @@ class _ProactiveLearning:
 			totalTransferNumList.append(transferLabelNum)
 
 			cvIter += 1      
-
+		
 		print("transfer num\t", np.mean(totalTransferNumList), np.sqrt(np.var(totalTransferNumList)))
+		# print("correct ratio\t", np.mean(correctTransferRatioList), np.sqrt(np.var(correctTransferRatioList)))
+		# print("untransfer correct ratio\t", np.mean(correctUntransferRatioList), np.sqrt(np.var(correctUntransferRatioList)))
+
+		# AuditorPrecisionFile = modelVersion+"_auditor_precision.txt"
+		# writeFile(totalAuditorPrecisionList, AuditorPrecisionFile)
+
+		# AuditorRecallFile = modelVersion+"_auditor_recall.txt"
+		# writeFile(totalAuditorRecallList, AuditorRecallFile)
 
 		AuditorAccFile = modelVersion+"_auditor_acc.txt"
-		AuditorAccFile = os.path.join(fileSrc, AuditorAccFile)
 		writeFile(totalAuditorAccList, AuditorAccFile)
 
 		totalACCFile = modelVersion+"_acc.txt"
-		totalACCFile = os.path.join(fileSrc, totalACCFile)
 		writeFile(totalAccList, totalACCFile)
 
 		humanACCFile = modelVersion+"_human_acc.txt"
-		humanACCFile = os.path.join(fileSrc, humanACCFile)
 		writeFile(humanAccList, humanACCFile)
 
 def writeFile(valueList, fileName):
@@ -524,6 +515,27 @@ def data_analysis(sourceLabelList, targetLabelList):
 		print(label, targetLabelMap[label],"--",)
 	print("\n")
 
+def readTransferLabel(transferLabelFile):
+	f = open(transferLabelFile)
+
+	transferLabelList = []
+	auditorLabelList = []
+
+	for rawLine in f:
+		
+		if "transfer" in rawLine:
+			continue
+		
+		line = rawLine.strip().split("\t")
+		lineLen = len(line)
+
+		auditorLabelList.append(float(line[0]))
+		transferLabelList.append(float(line[1]))
+
+	f.close()
+
+	return auditorLabelList, transferLabelList 
+
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
 
@@ -548,109 +560,29 @@ def readFeatureLabel(featureLabelFile):
 
 	return featureMatrix, labelList
 
-def readTransferLabel(transferLabelFile):
-	f = open(transferLabelFile)
-
-	auditorLabelList = []
-	transferLabelList = []
-	trueLabelList = []
-
-	for rawLine in f:
-		
-		if "transfer" in rawLine:
-			continue
-		
-		line = rawLine.strip().split("\t")
-		lineLen = len(line)
-
-		auditorLabelList.append(float(line[0]))
-		transferLabelList.append(float(line[1]))
-		trueLabelList.append(float(line[2]))
-
-	f.close()
-
-	return auditorLabelList, transferLabelList, trueLabelList
-
-def readSensorData():
-	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
-	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
-	label = tmp[:,-1]
-
-	fn = get_name_features(raw_pt)
-
-	featureMatrix = fn
-	labelList = label
-
-	return featureMatrix, labelList
-
 if __name__ == "__main__":
 
-	dataName = "electronics"
-	modelName = "Proactive_margin_linear_"+dataName
-	timeStamp = datetime.now()
-	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
+	# raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('./selectedNameFeature4Label_5types.txt').readlines()]
 
-	modelVersion = modelName+"_"+timeStamp
-	fileSrc = dataName
-	"""
-	 	processedKitchenElectronics
-	"""
-	if dataName == "electronics":
+	# raw_pt = [i.strip().split('\t')[:-1] for i in open().readlines()]
 
-		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	# f = open('../simulatedFeatureLabel_500_100_2.txt')
+	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+	featureMatrix = np.array(featureMatrix)
+	labelArray = np.array(labelList)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+	transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+	auditorLabelList, transferLabelList = readTransferLabel(transferLabelFile)
 
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(labelList)
+	transferLabelArray = np.array(transferLabelList)
+	print("number of types", len(set(labelArray)))
+	print 'class count of true labels of all ex:\n', ct(transferLabelArray)
 
-		transferLabelArray = np.array(transferLabelList)
-		print("number of types", len(set(labelArray)))
-		print('class count of true labels of all ex:\n', ct(transferLabelArray))
+	fold = 10
+	rounds = 150
 
+	al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray)
 
-		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
-
-		fold = 10
-		rounds = 150
-
-		multipleClassFlag = False
-		al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "sentiment_electronics", multipleClassFlag)
-
-		al.setInitialExList(initialExList)
-
-		al.run_CV()
-
-	"""
-	 	sensor type
-	"""
-
-	if dataName == "sensor_rice":
-	
-		featureMatrix, labelList = readSensorData()
-
-		transferLabelFile = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
-
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(trueLabelList)
-		transferLabelArray = np.array(transferLabelList)
-
-		print("number of types", len(set(labelArray)))
-		print('class count of true labels of all ex:\n', ct(transferLabelArray))
-
-		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
-
-		fold = 10
-		rounds = 150
-
-		multipleClassFlag = True
-		al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "sensor_rice", multipleClassFlag)
-
-		al.setInitialExList(initialExList)
-
-		al.run_CV()
-
+	al.run_CV()

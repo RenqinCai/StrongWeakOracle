@@ -585,7 +585,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "sensor_rice"
 	modelName = "Proactive_margin_linear_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)

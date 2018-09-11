@@ -28,12 +28,17 @@ from sklearn.metrics import confusion_matrix as CM
 from sklearn.preprocessing import normalize
 
 from datetime import datetime
-import os
 
 """
 electronics, sensor_rice
 """
+dataName = "sensor_rice"
 
+modelName = "activeLearning_margin_"+dataName
+timeStamp = datetime.now()
+timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
+
+modelVersion = modelName+"_"+timeStamp
 
 random.seed(10)
 np.random.seed(10)
@@ -55,12 +60,7 @@ def get_name_features(names):
 
 class active_learning:
 
-	def __init__(self, fold, rounds, fn, label, category, multipleClass):
-
-		self.m_category = category
-		print("category", category)
-		self.m_multipleClass = multipleClass
-		print("multipleClass", multipleClass)
+	def __init__(self, fold, rounds, fn, label):
 
 		self.fold = fold
 		self.rounds = rounds
@@ -68,25 +68,26 @@ class active_learning:
 		self.fn = np.array(fn)
 		self.label = np.array(label)
 
+		self.tao = 0
+		self.alpha_ = 1
+
+		self.ex_id = dd(list)
+
 		self.m_lambda = 0.01
 		self.m_selectA = 0
 		self.m_selectAInv = 0
 		self.m_selectCbRate = 0.002 ###0.005
-		self.m_clf = 0
-
-		self.m_initialExList = []
-
-	def setInitialExList(self, initialExList):
-		self.m_initialExList = initialExList
-
+		self.clf = 0
 
 	def select_example(self, unlabeled_list):
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
 
+		unlabeledDistanceList = []
+
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
-			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+			labelPredictProb = self.clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
 
 			sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
 			maxLabelPredictProb = sortedLabelPredictProb[0]
@@ -95,6 +96,10 @@ class active_learning:
 			idScore = -marginProb
 
 			unlabeledIdScoreMap[unlabeledId] = idScore
+
+			unlabeledDistance = self.clf.decision_function(self.fn[unlabeledId].reshape(1, -1))
+
+			unlabeledDistanceList.append(unlabeledDistance)
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
@@ -119,19 +124,42 @@ class active_learning:
 		fn_train = self.fn[labeled_list]
 		label_train = self.label[labeled_list]
 		
-		self.m_clf.fit(fn_train, label_train)
-		fn_preds = self.m_clf.predict(fn_test)
+		self.clf.fit(fn_train, label_train)
+		fn_preds = self.clf.predict(fn_test)
 
 		acc = accuracy_score(label_test, fn_preds)
 	
 		return acc
 
 	def pretrainSelectInit(self, train, foldIndex):
-		
-		initList = self.m_initialExList[foldIndex]
-		
+		initTotalList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
+		initList = initTotalList[foldIndex]
+
 		print("initList", initList)
 
+		# self.m_preClf = LR(multi_class="multinomial", solver='lbfgs',random_state=3, fit_intercept=False)
+		# self.m_preClf.fit(self.fn[train], self.label[train])
+
+		# distance = self.m_preClf.decision_function(self.fn[train])
+
+		# posDistanceMap = {}
+		# negDistanceMap = {}
+		# for trainIndex in range(len(train)):
+		# 	if self.label[train[trainIndex]] == 1.0:
+		# 		# print(self.label[train[trainIndex]])
+		# 		posDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
+		# 	else:
+		# 		negDistanceMap.setdefault(train[trainIndex], distance[trainIndex])
+
+		# sortedTrainIndexList = sorted(posDistanceMap, key=posDistanceMap.__getitem__, reverse=True)
+		# initList = []
+		
+		# initList += sortedTrainIndexList[:2]
+
+		# sortedTrainIndexList = sorted(negDistanceMap, key=negDistanceMap.__getitem__, reverse=True)
+		# initList += sortedTrainIndexList[:1]
+
+		# print(initList)
 		return initList
 
 	def run_CV(self):
@@ -166,10 +194,7 @@ class active_learning:
 			# self.clf = LR(fit_intercept=False)
 			# self.clf = LR(random_state=3)
 
-			if self.m_multipleClass:
-				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
-			else:
-				self.m_clf = LR(random_state=3)
+			self.clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -210,7 +235,7 @@ class active_learning:
 				fn_train_iter = self.fn[labeledExList]
 				label_train_iter = self.label[labeledExList]
 
-				self.m_clf.fit(fn_train_iter, label_train_iter) 
+				self.clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
 				# print(queryIter, "idx", idx, self.label[idx])
@@ -226,8 +251,6 @@ class active_learning:
 			cvIter += 1      
 			
 		totalACCFile = modelVersion+"_acc.txt"
-		totalACCFile = os.path.join(fileSrc, totalACCFile)
-
 		f = open(totalACCFile, "w")
 		for i in range(10):
 			totalAlNum = len(totalAccList[i])
@@ -340,59 +363,26 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
-
-	modelName = "activeLearning_margin_"+dataName
-	timeStamp = datetime.now()
-	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
-
-	modelVersion = modelName+"_"+timeStamp
-	fileSrc = dataName
-
 	"""
 	 	processedKitchenElectronics
 	"""
-	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	# featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
 
-		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
-
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(labelList)
-
-		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
-
-		fold = 10
-		rounds = 150
-
-		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray, "sentiment_electronics", multipleClassFlag)
-
-		al.setInitialExList(initialExList)
-
-		al.run_CV()
-
+	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 	"""
 	 	sensor type
 	"""
-	if dataName == "sensor_rice":
-		featureMatrix, labelList = readSensorData()
+	featureMatrix, labelList = readSensorData()
 
-		transferLabelFile0 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
-		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+	transferLabelFile0 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+	auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
 
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(trueLabelList)
+	featureMatrix = np.array(featureMatrix)
+	labelArray = np.array(trueLabelList)
 
-		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
+	fold = 10
+	rounds = 150
+	al = active_learning(fold, rounds, featureMatrix, labelArray)
 
-		fold = 10
-		rounds = 150
-
-		multipleClassFlag = True
-		al = active_learning(fold, rounds, featureMatrix, labelArray, "sensor", multipleClassFlag)
-
-		al.setInitialExList(initialExList)
-
-		al.run_CV()
+	al.run_CV()
