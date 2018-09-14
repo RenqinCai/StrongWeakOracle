@@ -294,6 +294,7 @@ class _ProactiveLearning:
 
 		correctTransferRatioList = []
 		totalTransferNumList = []
+		correctTransferNumList = []
 		correctUntransferRatioList = []
 
 		totalAuditorPrecisionList = []
@@ -461,10 +462,11 @@ class _ProactiveLearning:
 			# correctTransferRatioList.append(correctTransferRatio)
 			transferLabelNum = len(self.m_weakLabeledIDList)
 			totalTransferNumList.append(transferLabelNum)
-
+			correctTransferNumList.append(correctTransferLabelNum)
 			cvIter += 1      
 
-		print("transfer num\t", np.mean(totalTransferNumList), np.sqrt(np.var(totalTransferNumList)))
+		print("transfer num %f+/-%f", np.mean(totalTransferNumList), np.sqrt(np.var(totalTransferNumList)))
+		print("correct transfer num %f+/-%f", np.mean(correctTransferNumList), np.sqrt(np.var(correctTransferNumList)))
 
 		AuditorAccFile = modelVersion+"_auditor_acc.txt"
 		AuditorAccFile = os.path.join(fileSrc, AuditorAccFile)
@@ -597,11 +599,13 @@ if __name__ == "__main__":
 	"""
 	if dataName == "electronics":
 
-		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+		# transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
+		
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_kitchen--electronics.txt"
 		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
 		featureMatrix = np.array(featureMatrix)

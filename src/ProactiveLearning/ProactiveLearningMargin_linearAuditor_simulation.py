@@ -101,12 +101,35 @@ class _ProactiveLearning:
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			
-			idScore = self.getLUCB(unlabeledId)
+			idScore = self.getMargin(unlabeledId)
 			unlabeledIdScoreMap[unlabeledId] = idScore
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
 		return sortedUnlabeledIdList[0]
+
+
+	def getMargin(self, unlabeledId):
+		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
+
+		labelProbMap = {} ##labelIndex: labelProb
+		labelNum = len(labelPredictProb)
+		for labelIndex in range(labelNum):
+			labelProbMap.setdefault(labelIndex, labelPredictProb[labelIndex])
+
+		sortedLabelIndexList = sorted(labelProbMap, key=labelProbMap.__getitem__, reverse=True)
+
+		maxLabelIndex = sortedLabelIndexList[0]
+		subMaxLabelIndex = sortedLabelIndexList[1]
+
+		maxLabelProb = labelProbMap[maxLabelIndex]
+		subMaxLabelProb = labelProbMap[subMaxLabelIndex]
+
+		margin = maxLabelProb-subMaxLabelProb
+
+		margin = 0 - margin
+
+		return margin
 
 	def getLUCB(self, unlabeledId):
 		labelPredictProb = self.m_clf.predict_proba(self.m_targetNameFeature[unlabeledId].reshape(1, -1))[0]
@@ -271,6 +294,7 @@ class _ProactiveLearning:
 
 		correctTransferRatioList = []
 		totalTransferNumList = []
+		correctTransferNumList = []
 		correctUntransferRatioList = []
 
 		totalAuditorPrecisionList = []
@@ -438,10 +462,11 @@ class _ProactiveLearning:
 			# correctTransferRatioList.append(correctTransferRatio)
 			transferLabelNum = len(self.m_weakLabeledIDList)
 			totalTransferNumList.append(transferLabelNum)
-
+			correctTransferNumList.append(correctTransferLabelNum)
 			cvIter += 1      
 
-		print("transfer num\t", np.mean(totalTransferNumList), np.sqrt(np.var(totalTransferNumList)))
+		print("transfer num %f+/-%f", np.mean(totalTransferNumList), np.sqrt(np.var(totalTransferNumList)))
+		print("correct transfer num %f+/-%f", np.mean(correctTransferNumList), np.sqrt(np.var(correctTransferNumList)))
 
 		AuditorAccFile = modelVersion+"_auditor_acc.txt"
 		AuditorAccFile = os.path.join(fileSrc, AuditorAccFile)
@@ -562,8 +587,8 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
-	modelName = "Proactive_LUCB_linear_"+dataName
+	dataName = "simulation"
+	modelName = "Proactive_margin_linear_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -578,9 +603,7 @@ if __name__ == "__main__":
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		# transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
-
-		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_kitchen--electronics.txt"
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
 		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
@@ -632,4 +655,37 @@ if __name__ == "__main__":
 		al.setInitialExList(initialExList)
 
 		al.run_CV()
+
+	"""
+	simulation
+	"""
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		transferLabelFile1 = "../../dataset/synthetic/simulatedTransferLabel_1_500_20_2.txt"
+		auditorLabelList1, transferLabelList1, trueLabelList = readTransferLabel(transferLabelFile1)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+
+		transferLabelArray = np.array(transferLabelList0)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
 
