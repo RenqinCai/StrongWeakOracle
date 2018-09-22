@@ -1,5 +1,6 @@
 """
-train a weak oracle on the source domain data and a strong oracle on the target domain data. Use the difference of oracle's weight to predict the output of the auditor. Use the output of dot product to predict the auditor label
+train KNN on train dataset. The feature is the instance and the output is the weak labels.
+During testing, use KNN to output predicted labels and compare the predicted labels with the weak labels to see whether the weak label is trustful or not.
 """
 
 import numpy as np
@@ -26,6 +27,8 @@ from sklearn.linear_model import LogisticRegression as LR
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix as CM
 from sklearn.preprocessing import normalize
+
+from sklearn.neighbors import KNeighborsClassifier as KNN
 
 from sklearn.model_selection import train_test_split
 
@@ -59,16 +62,19 @@ def get_name_features(names):
 		return fn
 class active_learning:
 
-	def __init__(self, fold, rounds, source_fn, source_label, target_fn, target_label):
+	def __init__(self, fold, rounds, target_fn, target_label, transfer_label, auditor_label):
 
 		self.fold = fold
 		self.rounds = rounds
 
-		self.source_fn = source_fn
-		self.source_label = source_label
+		# self.source_fn = source_fn
+		# self.source_label = source_label
 
 		self.target_fn = target_fn
 		self.target_label = target_label
+
+		self.transfer_label = transfer_label
+		self.auditor_label = auditor_label
 
 		self.tao = 0
 		self.alpha_ = 1
@@ -96,12 +102,11 @@ class active_learning:
 		# print debug
 		return acc
 
-
 	def run_CV(self):
 
 		cvIter = 0
 		
-		totalInstanceNum = len(self.target_label)
+		totalInstanceNum = len(self.transfer_label)
 		print("target totalInstanceNum\t", totalInstanceNum)
 		indexList = [i for i in range(totalInstanceNum)]
 
@@ -130,68 +135,66 @@ class active_learning:
 		totalAccList = [0 for i in range(10)]
 
 		coefList = [0 for i in range(10)]
-	
-		self.m_weakClf = LR(random_state=3)
-		self.m_weakClf.fit(self.source_fn, self.source_label)
-		
-		train = []
-		foldIndex = 1
-		for preFoldIndex in range(foldIndex):
-			train.extend(foldInstanceList[preFoldIndex])
-		for postFoldIndex in range(foldIndex+1, foldNum):
-			train.extend(foldInstanceList[postFoldIndex])
 
-		test = foldInstanceList[foldIndex]
+		auditorKNNAccList = []
+		targetKNNAccList = []
+		transferKNNAccList = []
 
-		self.m_strongClf = LR(random_state=3)
-		self.m_strongClf.fit(self.target_fn, self.target_label)
 
-		predTargetLabels = self.m_weakClf.predict(self.target_fn)
-		print(predTargetLabels.shape)
-		print(self.target_label.shape)
+		KNNNeighbors = 1
+		for foldIndex in range(foldNum):
+			print("###############%d#########"%foldIndex)
+			# print("foldIndex", foldIndex)
+			train = []
+			for preFoldIndex in range(foldIndex):
+				train.extend(foldInstanceList[preFoldIndex])
 
-		self.m_transferWeakClf = LR(random_state=3)
-		self.m_transferWeakClf.fit(self.target_fn, predTargetLabels)
+			test = foldInstanceList[foldIndex]
+			for postFoldIndex in range(foldIndex+1, foldNum):
+				train.extend(foldInstanceList[postFoldIndex])
+ 
+			# KNNClf.fit(self.target_fn[train], self.transfer_label[train])
+			# 
+			"""
+			fit a knn clf on auditor labels
+			"""
+			KNNClf = KNN(n_neighbors=KNNNeighbors)
+			KNNClf.fit(self.target_fn[train], self.auditor_label[train])
 
-		auditorLabels = (self.target_label == predTargetLabels)
+			predAuditorLabels = KNNClf.predict(self.target_fn[test])
+			acc = accuracy_score(self.auditor_label[test], predAuditorLabels)
+			print("auditor KNN clf", acc)
+			auditorKNNAccList.append(acc)
 
-		coefDiff = self.m_strongClf.coef_ - self.m_transferWeakClf.coef_
-		predAuditorLabels = np.dot(self.target_fn, coefDiff.reshape(-1, 1))
-		# print("intercept", self.m_strongClf.intercept_, self.m_weakClf.intercept_)
-		predAuditorLabels += self.m_strongClf.intercept_ - self.m_weakClf.intercept_
-		predAuditorLabels = np.abs(predAuditorLabels)
 
-		maxAcc = 0
-		maxDelta = 0
-		deltaList = [i for i in np.arange(0.0, 25.0, 0.005)]
-		for delta in deltaList:
-		# delta = 0.005
-				# if delta %2 == 0:
-				# 	print("delta", delta)
-			# delta = 3.0
-			predAuditorLabelsDelta = (predAuditorLabels < delta)
-			# print("predAuditorLabels", predAuditorLabelsDelta)
-			
-			accLinear = accuracy_score(auditorLabels, predAuditorLabelsDelta)
+			"""
+			fit a knn clf on strong oracle's labels
+			"""
+			KNNClf = KNN(n_neighbors=KNNNeighbors)
+			KNNClf.fit(self.target_fn[train], self.target_label[train])
 
-			if accLinear > maxAcc:
-				maxAcc = accLinear
-				maxDelta = delta
+			predTargetLabels = KNNClf.predict(self.target_fn[test])
+			acc = accuracy_score(self.target_label[test], predTargetLabels)
+			print("target KNN clf", acc)
+			targetKNNAccList.append(acc)
 
-		# print(test)
-		
-		# linearAuditor = LR(random_state=3)
-		# linearAuditor.fit(self.target_fn, auditorLabels)
-		# predAuditorLabels = linearAuditor.predict(self.target_fn)
-		# print(strongPred, weakPred)
 
-		# predAuditorLabels = strongPred-weakPred
+			"""
+			fit a knn clf on weak oracle's labels
+			"""
+			KNNClf = KNN(n_neighbors=KNNNeighbors)
+			KNNClf.fit(self.target_fn[train], self.transfer_label[train])
 
-		# # predAuditorLabels = predAuditorLabels > 0
-		# correctPredLabels = (auditorLabels == predAuditorLabels)
-			
-		# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
-		print(maxDelta, "ACC", maxAcc)
+			predTransferLabels = KNNClf.predict(self.target_fn[test])
+			acc = accuracy_score(self.transfer_label[test], predTransferLabels)
+			print("transfer KNN clf", acc)
+			transferKNNAccList.append(acc)
+
+		print("auditor knn acc", np.mean(auditorKNNAccList), np.sqrt(np.var(auditorKNNAccList)))
+		print("target knn acc", np.mean(targetKNNAccList), np.sqrt(np.var(targetKNNAccList)))
+		print("transfer knn acc", np.mean(transferKNNAccList), np.sqrt(np.var(transferKNNAccList)))
+
+
 		
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
@@ -272,24 +275,23 @@ def readFeatureLabelCSV(csvFile):
 
 if __name__ == "__main__":
 
-	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
-	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
+	dataName = "electronics"
+	featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
-	sourceLabel = np.array(sourceLabelList)
-	sourceFeatureMatrix = np.array(sourceFeatureMatrix)
+	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-	print('class count of true source labels of all ex:\n', ct(sourceLabel))
+	transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
+	auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
-	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
-	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
+	# getNoiseRatio(trueLabelList, transferLabelList)
+	featureMatrix = np.array(featureMatrix)
 
-	targetLabel = np.array(targetLabelList)
-	targetFeatureMatrix = np.array(targetFeatureMatrix)
-
-	print('class count of true target labels of all ex:\n', ct(targetLabel))
+	auditorLabel = np.array(auditorLabelList)
+	transferLabel = np.array(transferLabelList)
+	trueLabel = np.array(trueLabelList)
 
 	fold = 1
 	rounds = 100
-	al = active_learning(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
+	al = active_learning(fold, rounds, featureMatrix, trueLabel, transferLabel, auditorLabel)
 
 	al.run_CV()

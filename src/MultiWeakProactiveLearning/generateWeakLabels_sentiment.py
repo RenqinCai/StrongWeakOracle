@@ -1,5 +1,5 @@
 """
-train a weak oracle on the source domain data and a strong oracle on the target domain data. Use the difference of oracle's weight to predict the output of the auditor. Use the output of dot product to predict the auditor label
+generate transferred labels from weak oracle.
 """
 
 import numpy as np
@@ -9,7 +9,7 @@ import random
 import re
 import itertools
 import pylab as pl
-
+import os
 from collections import defaultdict as dd
 from collections import Counter as ct
 
@@ -31,10 +31,14 @@ from sklearn.model_selection import train_test_split
 
 from datetime import datetime
 
-sourceDataName = "books"
+# sourceDataName = "electronics"
+# targetDataName = "kitchen", books
+
+sourceDataName = "kitchen"
 targetDataName = "electronics"
 
-modelName = "passiveAuditorActiveLearner_"+sourceDataName+"_"+targetDataName
+dataName = sourceDataName+"--"+targetDataName
+modelName = "activeLearning_offline_transfer_"+dataName
 timeStamp = datetime.now()
 timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -78,10 +82,8 @@ class active_learning:
 		self.m_AInv = 0
 		self.m_cbRate = 0.05 ##0.05
 
-		self.m_strongClf = None
-		self.m_weakClf = None
-
 		self.ex_id = dd(list)
+
 
 	def get_pred_acc(self, fn_test, label_test, labeled_list):
 
@@ -91,13 +93,16 @@ class active_learning:
 		self.m_clf.fit(fn_train, label_train)
 		fn_preds = self.m_clf.predict(fn_test)
 
+		# print(len(label_train), sum(label_train), "ratio", sum(label_train)*1.0/len(label_train))
+		# print("label_train", label_train)
+
 		acc = accuracy_score(label_test, fn_preds)
 		# print("acc\t", acc)
 		# print debug
 		return acc
 
 
-	def run_CV(self):
+	def run_CV(self, dataDir, sourceName, targetName):
 
 		cvIter = 0
 		
@@ -130,69 +135,35 @@ class active_learning:
 		totalAccList = [0 for i in range(10)]
 
 		coefList = [0 for i in range(10)]
-	
-		self.m_weakClf = LR(random_state=3)
-		self.m_weakClf.fit(self.source_fn, self.source_label)
-		
-		train = []
-		foldIndex = 1
-		for preFoldIndex in range(foldIndex):
-			train.extend(foldInstanceList[preFoldIndex])
-		for postFoldIndex in range(foldIndex+1, foldNum):
-			train.extend(foldInstanceList[postFoldIndex])
 
-		test = foldInstanceList[foldIndex]
+		self.m_clf = LR(random_state=3)
+		self.m_clf.fit(self.source_fn, self.source_label)
 
-		self.m_strongClf = LR(random_state=3)
-		self.m_strongClf.fit(self.target_fn, self.target_label)
+		target_preds = self.m_clf.predict(self.target_fn)
+		acc = accuracy_score(self.target_label, target_preds)
 
-		predTargetLabels = self.m_weakClf.predict(self.target_fn)
-		print(predTargetLabels.shape)
-		print(self.target_label.shape)
+		print("transfer acc", acc)	
 
-		self.m_transferWeakClf = LR(random_state=3)
-		self.m_transferWeakClf.fit(self.target_fn, predTargetLabels)
+		transferLabelFileName = "transferLabel_"+sourceName+"--"+targetName+".txt"
+		transferLabelFileName = os.path.join(dataDir, transferLabelFileName)
+		f = open(transferLabelFileName, "w")
 
-		auditorLabels = (self.target_label == predTargetLabels)
+		f.write("auditorLabel"+"\t"+"transferLabel"+"\t"+"trueLabel\n")
+		for instanceIndex in range(totalInstanceNum):
+			transferLabel = target_preds[instanceIndex]
+			trueLabel = self.target_label[instanceIndex]
 
-		coefDiff = self.m_strongClf.coef_ - self.m_transferWeakClf.coef_
-		predAuditorLabels = np.dot(self.target_fn, coefDiff.reshape(-1, 1))
-		# print("intercept", self.m_strongClf.intercept_, self.m_weakClf.intercept_)
-		predAuditorLabels += self.m_strongClf.intercept_ - self.m_weakClf.intercept_
-		predAuditorLabels = np.abs(predAuditorLabels)
+			if transferLabel == trueLabel:
+				f.write("1.0"+"\t")
+			else:
+				f.write("0.0"+"\t")
 
-		maxAcc = 0
-		maxDelta = 0
-		deltaList = [i for i in np.arange(0.0, 25.0, 0.005)]
-		for delta in deltaList:
-		# delta = 0.005
-				# if delta %2 == 0:
-				# 	print("delta", delta)
-			# delta = 3.0
-			predAuditorLabelsDelta = (predAuditorLabels < delta)
-			# print("predAuditorLabels", predAuditorLabelsDelta)
-			
-			accLinear = accuracy_score(auditorLabels, predAuditorLabelsDelta)
+			f.write(str(transferLabel)+"\t"+str(trueLabel))
+			f.write("\n")
 
-			if accLinear > maxAcc:
-				maxAcc = accLinear
-				maxDelta = delta
+		f.close()
 
-		# print(test)
-		
-		# linearAuditor = LR(random_state=3)
-		# linearAuditor.fit(self.target_fn, auditorLabels)
-		# predAuditorLabels = linearAuditor.predict(self.target_fn)
-		# print(strongPred, weakPred)
 
-		# predAuditorLabels = strongPred-weakPred
-
-		# # predAuditorLabels = predAuditorLabels > 0
-		# correctPredLabels = (auditorLabels == predAuditorLabels)
-			
-		# acc = np.sum(correctPredLabels)*1.0/len(correctPredLabels)
-		print(maxDelta, "ACC", maxAcc)
-		
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
 
@@ -272,7 +243,10 @@ def readFeatureLabelCSV(csvFile):
 
 if __name__ == "__main__":
 
-	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
+	###processedKitchenElectronics electronics ---> kitchen
+
+	###processedBooksElectronics books ---> electronics
+	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+sourceDataName
 	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
 
 	sourceLabel = np.array(sourceLabelList)
@@ -280,7 +254,7 @@ if __name__ == "__main__":
 
 	print('class count of true source labels of all ex:\n', ct(sourceLabel))
 
-	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
+	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+targetDataName
 	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
 
 	targetLabel = np.array(targetLabelList)
@@ -292,4 +266,6 @@ if __name__ == "__main__":
 	rounds = 100
 	al = active_learning(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
 
-	al.run_CV()
+	dataDir = "../../dataset/processed_acl/processedBooksKitchenElectronics/"
+
+	al.run_CV(dataDir, sourceDataName, targetDataName)

@@ -86,12 +86,25 @@ class active_learning:
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			# print("unlabeledId\t", unlabeledId)
-			idScore = self.getLUCB(unlabeledId)
+			idScore = self.getMargin(unlabeledId)
 			unlabeledIdScoreMap[unlabeledId] = idScore
 			# print("unlabeledId", unlabeledId, idScore)
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 		return sortedUnlabeledIdList[0]
+
+	def getMargin(self, unlabeledId):
+		labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+
+		sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
+
+		maxLabelPredictProb = sortedLabelPredictProb[0]
+		subMaxLabelPredictProb = sortedLabelPredictProb[1]
+
+		idScore = maxLabelPredictProb-subMaxLabelPredictProb
+		idScore = -idScore
+
+		return idScore
 
 	def getLUCB(self, unlabeledId):
 		labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
@@ -242,7 +255,7 @@ class active_learning:
 				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
-				self.update_select_confidence_bound(idx)
+				# self.update_select_confidence_bound(idx)
 				# print(queryIter, "idx", idx, self.label[idx])
 				# self.update_select_confidence_bound(idx)
 
@@ -371,9 +384,9 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "sensor_rice"
 
-	modelName = "activeLearning_LUCB_"+dataName
+	modelName = "auditor_margin"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 

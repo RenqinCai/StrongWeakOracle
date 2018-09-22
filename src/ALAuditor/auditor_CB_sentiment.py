@@ -353,13 +353,12 @@ if __name__ == "__main__":
 	"""
 	if dataName == "electronics":
 
-		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
-		
-		###processedKitchenElectronics transferLabel_electronics--kitchen.txt
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
+
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
@@ -368,7 +367,7 @@ if __name__ == "__main__":
 		auditorLabelArray = np.array(auditorLabelList)
 
 		initialExList = []
-		initialExList = [[397, 1942, 200], [1055, 144, 873], [865, 1702, 1769], [1156, 906, 1964], [1562, 1299, 617], [1431, 1033, 1823], [1063, 1313, 1183], [817, 1631, 426], [360, 1950, 1702], [1921, 822, 1528]]
+		initialExList = [[397, 1942, 200], [1055, 144, 873], [865, 1702, 1769], [1156, 906, 1964], [1562, 1299, 617], [231, 532, 690], [1751, 1247, 1082], [817, 1631, 426], [360, 1950, 1702], [1921, 822, 1528]]
 
 		fold = 10
 		rounds = 150

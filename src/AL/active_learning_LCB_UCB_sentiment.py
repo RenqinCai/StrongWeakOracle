@@ -388,23 +388,17 @@ if __name__ == "__main__":
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
-		transferLabelArray = np.array(transferLabelList)
-		auditorLabelArray = np.array(auditorLabelList)
-
-		initialExList = []
-		initialExList = [[397, 1942, 200], [1055, 144, 873], [865, 1702, 1769], [1156, 906, 1964], [1562, 1299, 617], [231, 532, 690], [1751, 1247, 1082], [817, 1631, 426], [360, 1950, 1702], [1921, 822, 1528]]
+		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
 
 		fold = 10
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sentiment_electronics", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "sentiment_electronics", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
@@ -422,16 +416,13 @@ if __name__ == "__main__":
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(trueLabelList)
 
-		auditorLabelArray = np.array(auditorLabelList0)
-
-		initialExList = []
-		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [3, 362, 268], [328, 307, 194], [77, 413, 380],  [119, 170, 420], [312, 310, 6],  [115, 449, 226], [297, 87, 46]]
+		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
 
 		fold = 10
 		rounds = 150
 
 		multipleClassFlag = True
-		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "sensor", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

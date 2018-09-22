@@ -86,12 +86,25 @@ class active_learning:
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			# print("unlabeledId\t", unlabeledId)
-			idScore = self.getLUCB(unlabeledId)
+			idScore = self.getMargin(unlabeledId)
 			unlabeledIdScoreMap[unlabeledId] = idScore
 			# print("unlabeledId", unlabeledId, idScore)
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 		return sortedUnlabeledIdList[0]
+
+	def getMargin(self, unlabeledId):
+		labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+
+		sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
+
+		maxLabelPredictProb = sortedLabelPredictProb[0]
+		subMaxLabelPredictProb = sortedLabelPredictProb[1]
+
+		idScore = maxLabelPredictProb-subMaxLabelPredictProb
+		idScore = -idScore
+
+		return idScore
 
 	def getLUCB(self, unlabeledId):
 		labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
@@ -242,7 +255,7 @@ class active_learning:
 				self.m_clf.fit(fn_train_iter, label_train_iter) 
 
 				idx = self.select_example(unlabeledExList) 
-				self.update_select_confidence_bound(idx)
+				# self.update_select_confidence_bound(idx)
 				# print(queryIter, "idx", idx, self.label[idx])
 				# self.update_select_confidence_bound(idx)
 
@@ -371,9 +384,9 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "simulation"
 
-	modelName = "activeLearning_LUCB_"+dataName
+	modelName = "auditor_margin"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -432,6 +445,31 @@ if __name__ == "__main__":
 
 		multipleClassFlag = True
 		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+		auditorLabelArray = np.array(auditorLabelList0)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "synthetic", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

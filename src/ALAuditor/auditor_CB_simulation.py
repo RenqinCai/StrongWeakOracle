@@ -1,5 +1,5 @@
 """
-active learning with LUCB as the query strategy
+active learning with random initialization and CB query strategy
 """
 
 import numpy as np
@@ -33,6 +33,8 @@ import os
 """
 electronics, sensor_rice
 """
+# dataName = "sensor_rice"
+
 
 
 random.seed(10)
@@ -79,51 +81,24 @@ class active_learning:
 	def setInitialExList(self, initialExList):
 		self.m_initialExList = initialExList
 
-
 	def select_example(self, unlabeled_list):
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
+
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			# print("unlabeledId\t", unlabeledId)
-			idScore = self.getLUCB(unlabeledId)
+			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
+
+			selectCB = self.get_select_confidence_bound(unlabeledId)
+
+			idScore = selectCB
+			
 			unlabeledIdScoreMap[unlabeledId] = idScore
-			# print("unlabeledId", unlabeledId, idScore)
 
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
+
 		return sortedUnlabeledIdList[0]
-
-	def getLUCB(self, unlabeledId):
-		labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
-
-		labelIndexMap = {} ##labelIndex: labelProb
-		labelNum = len(labelPredictProb)
-		for labelIndex in range(labelNum):
-			labelIndexMap.setdefault(labelIndex, labelPredictProb[labelIndex])
-
-		sortedLabelIndexList = sorted(labelIndexMap, key=labelIndexMap.__getitem__, reverse=True)
-
-		maxLabelIndex = sortedLabelIndexList[0]
-		subMaxLabelIndex = sortedLabelIndexList[1]
-
-		selectCB = self.get_select_confidence_bound(unlabeledId)
-
-		coefDiff = 0
-		
-		if self.m_multipleClass:
-			maxCoef = self.m_clf.coef_[maxLabelIndex]
-			subMaxCoef = self.m_clf.coef_[subMaxLabelIndex]
-			coefDiff = np.dot(maxCoef, self.fn[unlabeledId])-np.dot(subMaxCoef, self.fn[unlabeledId])
-			coefDiff += self.m_clf.intercept_[maxLabelIndex]-self.m_clf.intercept_[subMaxLabelIndex]
-		else:
-			coefDiff = np.dot(self.m_clf.coef_, self.fn[unlabeledId])
-			coefDiff += self.m_clf.intercept_
-
-		coefDiff = np.abs(coefDiff)
-		LCB = coefDiff-2*0.002*selectCB
-		LUCB = 1-LCB
-
-		return LUCB
 
 	def init_confidence_bound(self, featureDim):
 		self.m_selectA = self.m_lambda*np.identity(featureDim)
@@ -160,6 +135,7 @@ class active_learning:
 
 		return initList
 
+
 	def run_CV(self):
 
 		cvIter = 0
@@ -187,48 +163,39 @@ class active_learning:
 		totalAccList = [[] for i in range(10)]
 		totalNewClassFlagList = [[] for i in range(10)]
 		for foldIndex in range(foldNum):
-			# self.clf = LinearSVC(random_state=3)
 
-			# self.m_clf = LR(random_state=3)
 			if self.m_multipleClass:
 				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
 			else:
 				self.m_clf = LR(random_state=3)
 
-
 			train = []
 			for preFoldIndex in range(foldIndex):
 				train.extend(foldInstanceList[preFoldIndex])
-
-			test = foldInstanceList[foldIndex]
 			for postFoldIndex in range(foldIndex+1, foldNum):
 				train.extend(foldInstanceList[postFoldIndex])
 
-			trainNum = int(totalInstanceNum*0.9)
-			
+			fn_train = self.fn[train]
+
+			test = foldInstanceList[foldIndex]
+		
 			fn_test = self.fn[test]
 			label_test = self.label[test]
-
-			fn_train = self.fn[train]
 
 			featureDim = len(fn_train[0])
 			self.init_confidence_bound(featureDim)
 			
 			initExList = []
-			# initExList = [234, 366, 183]
 			initExList = self.pretrainSelectInit(train, foldIndex)
-			# initExList = [325, 287, 422]
-			# random.seed(101)
-			# initExList = random.sample(train, 3)
+			
 			fn_init = self.fn[initExList]
 			label_init = self.label[initExList]
 
-		
 			print("initExList\t", initExList, label_init)
 			queryIter = 3
 			labeledExList = []
 			unlabeledExList = []
-			###labeled index
+			
 			labeledExList.extend(initExList)
 			unlabeledExList = list(set(train)-set(labeledExList))
 
@@ -257,6 +224,7 @@ class active_learning:
 			
 		totalACCFile = modelVersion+"_acc.txt"
 		totalACCFile = os.path.join(fileSrc, totalACCFile)
+
 
 		f = open(totalACCFile, "w")
 		for i in range(10):
@@ -371,9 +339,9 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "simulation"
 
-	modelName = "activeLearning_LUCB_"+dataName
+	modelName = "activeLearning_CB_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
@@ -384,6 +352,7 @@ if __name__ == "__main__":
 	 	processedKitchenElectronics
 	"""
 	if dataName == "electronics":
+
 		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
@@ -432,6 +401,31 @@ if __name__ == "__main__":
 
 		multipleClassFlag = True
 		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+		auditorLabelArray = np.array(auditorLabelList0)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "synthetic", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

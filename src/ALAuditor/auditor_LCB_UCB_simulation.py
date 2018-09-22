@@ -371,7 +371,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "simulation"
 
 	modelName = "activeLearning_LUCB_"+dataName
 	timeStamp = datetime.now()
@@ -432,6 +432,31 @@ if __name__ == "__main__":
 
 		multipleClassFlag = True
 		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+		auditorLabelArray = np.array(auditorLabelList0)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "synthetic", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

@@ -340,7 +340,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "simulation"
 
 	modelName = "activeLearning_margin_"+dataName
 	timeStamp = datetime.now()
@@ -353,7 +353,7 @@ if __name__ == "__main__":
 	 	processedKitchenElectronics
 	"""
 	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
@@ -392,6 +392,33 @@ if __name__ == "__main__":
 
 		multipleClassFlag = True
 		al = active_learning(fold, rounds, featureMatrix, labelArray, "sensor", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	"""
+	 	synthetic data
+	"""
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "synthetic", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

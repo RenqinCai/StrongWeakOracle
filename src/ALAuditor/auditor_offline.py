@@ -54,7 +54,12 @@ def get_name_features(names):
 		
 class active_learning:
 
-	def __init__(self, fold, rounds, fn, tranfersLabel, label):
+	def __init__(self, fold, rounds, fn, label, category, multipleClass):
+
+		self.m_category = category
+		print("category", category)
+		self.m_multipleClass = multipleClass
+		print("multipleClass", multipleClass)
 
 		self.fold = fold
 		self.rounds = rounds
@@ -74,6 +79,7 @@ class active_learning:
 		self.m_cbRate = 0.05 ##0.05
 
 		self.ex_id = dd(list)
+		self.m_clf = None
 
 	def PCAFeature(self, reducedDim):
 		pca = PCA(n_components=reducedDim, svd_solver="full")
@@ -108,6 +114,17 @@ class active_learning:
 
 		return CB
 
+	def setInitialExList(self, initialExList):
+		self.m_initialExList = initialExList
+
+	def pretrainSelectInit(self, train, foldIndex):
+
+		initList = self.m_initialExList[foldIndex]
+	
+		print("initList", initList)
+
+		return initList
+
 	def run_CV(self):
 
 		cvIter = 0
@@ -138,8 +155,8 @@ class active_learning:
 		# random.seed(3)
 		totalAccList = [0 for i in range(10)]
 
-		posRatioList = []
-
+		testPosRatioList = []
+		trainPosRatioList = []
 		# self.PCAFeature(10)
 
 		for foldIndex in range(foldNum):
@@ -147,7 +164,10 @@ class active_learning:
 			# self.m_clf = LinearSVC(random_state=3)
 			# self.m_clf = SVC(random_state=3)
 			# self.m_clf = LR(random_state=3)
-			self.m_clf = RFC(random_state=3)
+			if self.m_multipleClass:
+				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
+			else:
+				self.m_clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -163,14 +183,24 @@ class active_learning:
 			fn_test = self.fn[test]
 			label_test = self.label[test]
 
+			sampledTrainNum = len(train)
+			sampledTrainNum = 150
+			train_sampled = random.sample(train, sampledTrainNum)
+			train = train_sampled
+
 			fn_train = self.fn[train]
 			label_train = self.label[train]
 
 			testOneNum = np.sum(label_test)
 			testNum = len(fn_test)
 
-			posRatio = testOneNum*1.0/testNum
-			posRatioList.append(posRatio)
+			trainOneNum = np.sum(label_train)
+			trainNum = len(label_train)
+			trainPosRatio = trainOneNum*1.0/trainNum
+			trainPosRatioList.append(trainPosRatio)
+
+			testPosRatio = testOneNum*1.0/testNum
+			testPosRatioList.append(testPosRatio)
 
 			self.m_clf.fit(fn_train, label_train)
 
@@ -181,7 +211,9 @@ class active_learning:
 
 			cvIter += 1      
 		
-		print("posRatioList", posRatioList, np.mean(posRatioList), np.sqrt(np.var(posRatioList)))
+		print("trainPosRatioList", trainPosRatioList, np.mean(trainPosRatioList), np.sqrt(np.var(trainPosRatioList)))
+
+		print("testPosRatioList", testPosRatioList, np.mean(testPosRatioList), np.sqrt(np.var(testPosRatioList)))
 
 		print("totalAccList", totalAccList, np.mean(totalAccList), np.sqrt(np.var(totalAccList)))
 
@@ -242,35 +274,107 @@ def readTransferLabel(transferLabelFile):
 
 	return auditorLabelList, transferLabelList, targetLabelList
 
+def readSensorData():
+	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
+	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
+	label = tmp[:,-1]
+
+	fn = get_name_features(raw_pt)
+
+	featureMatrix = fn
+	labelList = label
+
+	return featureMatrix, labelList
+
 if __name__ == "__main__":
 
-	###processedKitchenElectronics
-	featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
+	dataName = "electronics"
 
-	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
-	featureMatrix = np.array(featureMatrix)
-	labelArray = np.array(labelList)
+	modelName = "offline_auditor_"+dataName
+	timeStamp = datetime.now()
+	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
-	###processedKitchenElectronics transferLabel_electronics--kitchen.txt
-	transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
-	auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
-	transferLabelArray = np.array(transferLabelList)
-	
-	auditorLabelArray = np.array(auditorLabelList)
-	# print(auditorLabel)
-	# exit()
-	# label = np.array([float(i.strip()) for i in open('targetAuditorLabel.txt').readlines()])
+	modelVersion = modelName+"_"+timeStamp
+	fileSrc = dataName
 
-	# tmp = np.genfromtxt('../../data/rice_hour_sdh', delimiter=',')
-	# label = tmp[:,-1]
-	print('class count of true labels of all ex:\n', ct(labelArray))
-	print("count of auditor", ct(auditorLabelArray))
-	# exit()
-	# mapping = {1:'co2',2:'humidity',4:'rmt',5:'status',6:'stpt',7:'flow',8:'HW sup',9:'HW ret',10:'CW sup',11:'CW ret',12:'SAT',13:'RAT',17:'MAT',18:'C enter',19:'C leave',21:'occu'}
+	"""
+	 	processedKitchenElectronics
+	"""
+	if dataName == "electronics":
+		
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
-	# fn = get_name_features(raw_pt)
-	fold = 10
-	rounds = 100
-	al = active_learning(fold, rounds, featureMatrix, transferLabelArray, auditorLabelArray)
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-	al.run_CV()
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(labelList)
+
+		transferLabelArray = np.array(transferLabelList)
+		auditorLabelArray = np.array(auditorLabelList)
+
+		initialExList = []
+		initialExList = [[397, 1942, 200], [1055, 144, 873], [865, 1702, 1769], [1156, 906, 1964], [1562, 1299, 617], [231, 532, 690], [1751, 1247, 1082], [817, 1631, 426], [360, 1950, 1702], [1921, 822, 1528]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sentiment_electronics", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	"""
+	 	sensor type
+	"""
+	if dataName == "sensor_rice":
+		featureMatrix, labelList = readSensorData()
+
+		transferLabelFile0 = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+		auditorLabelArray = np.array(auditorLabelList0)
+
+		initialExList = []
+		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [3, 362, 268], [328, 307, 194], [77, 413, 380],  [119, 170, 420], [312, 310, 6],  [115, 449, 226], [297, 87, 46]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = True
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "sensor", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "simulation":
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+
+		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+		auditorLabelArray = np.array(auditorLabelList0)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, auditorLabelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
