@@ -1,3 +1,7 @@
+"""
+offline learning via considering weak labels as data poison and remove poisoned data to train a better classifier
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 import math
@@ -24,13 +28,12 @@ from sklearn.metrics import confusion_matrix as CM
 from sklearn.preprocessing import normalize
 
 from datetime import datetime
+import os
 
-dataName = "electronics"
-modelName = "activeLearning_offline_"+dataName
-timeStamp = datetime.now()
-timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
+"""
+electronics, sensor_rice
+"""
 
-modelVersion = modelName+"_"+timeStamp
 
 random.seed(10)
 np.random.seed(10)
@@ -49,58 +52,68 @@ def get_name_features(names):
 		fn = cv.fit_transform(name).toarray()
 
 		return fn
+
 class active_learning:
 
-	def __init__(self, fold, rounds, fn, label):
+	def __init__(self, fold, rounds, fn, label, transferlabel, category, multipleClass):
+
+		self.m_category = category
+		print("category", category)
+		self.m_multipleClass = multipleClass
+		print("multipleClass", multipleClass)
 
 		self.fold = fold
 		self.rounds = rounds
 
-		self.fn = fn
-		self.label = label
-
-		self.tao = 0
-		self.alpha_ = 1
+		self.fn = np.array(fn)
+		self.label = np.array(label)
+		self.transferLabel = np.array(transferlabel)
 
 		self.m_lambda = 0.01
-		self.m_A = 0
-		self.m_AInv = 0
-		self.m_cbRate = 0.05 ##0.05
+		self.m_selectA = 0
+		self.m_selectAInv = 0
+		self.m_selectCbRate = 0.002 ###0.005
+		self.m_clf = 0
 
-		self.ex_id = dd(list)
+		self.m_initialExList = []
+
+	def setInitialExList(self, initialExList):
+		self.m_initialExList = initialExList
+
 
 	def select_example(self, unlabeled_list):
-
 		unlabeledIdScoreMap = {} ###unlabeledId:idscore
 		unlabeledIdNum = len(unlabeled_list)
-		# print("---------------")
-		alpha = 0.1
+
 		for unlabeledIdIndex in range(unlabeledIdNum):
 			unlabeledId = unlabeled_list[unlabeledIdIndex]
 			labelPredictProb = self.m_clf.predict_proba(self.fn[unlabeledId].reshape(1, -1))[0]
 
 			sortedLabelPredictProb = sorted(labelPredictProb, reverse=True)
-
 			maxLabelPredictProb = sortedLabelPredictProb[0]
 			subMaxLabelPredictProb = sortedLabelPredictProb[1]
+			marginProb = maxLabelPredictProb-subMaxLabelPredictProb
+			idScore = -marginProb
 
-			idScore = maxLabelPredictProb-subMaxLabelPredictProb
-			idScore = -idScore
-			# selectCB = self.get_confidence_bound(unlabeledId)
-			# print("selectCB", self.m_selectCbRate*selectCB)
-			# LCB = maxLabelPredictProb+self.m_selectCbRate*selectCB
-
-			# idScore = np.dot(self.m_clf.coef_, self.fn[unlabeledId])-2*alpha*selectCB
-
-			# idScore = -selectCB
-
-			# print(np.dot(self.m_clf.coef_, self.fn[unlabeledId]), 2*selectCB, 2*alpha*selectCB)
 			unlabeledIdScoreMap[unlabeledId] = idScore
-		# exit()
-		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
+
 		sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)
 
 		return sortedUnlabeledIdList[0]
+
+	def init_confidence_bound(self, featureDim):
+		self.m_selectA = self.m_lambda*np.identity(featureDim)
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def update_select_confidence_bound(self, exId):
+		# print("updating select cb", exId)
+		self.m_selectA += np.outer(self.fn[exId], self.fn[exId])
+		self.m_selectAInv = np.linalg.inv(self.m_selectA)
+
+	def get_select_confidence_bound(self, exId):
+		CB = np.sqrt(np.dot(np.dot(self.fn[exId], self.m_selectAInv), self.fn[exId]))
+
+		return CB
 
 	def get_pred_acc(self, fn_test, label_test, labeled_list):
 
@@ -110,26 +123,36 @@ class active_learning:
 		self.m_clf.fit(fn_train, label_train)
 		fn_preds = self.m_clf.predict(fn_test)
 
-		# print(len(label_train), sum(label_train), "ratio", sum(label_train)*1.0/len(label_train))
-		# print("label_train", label_train)
-
 		acc = accuracy_score(label_test, fn_preds)
-		# print("acc\t", acc)
-		# print debug
+	
 		return acc
 
-	def init_confidence_bound(self, featureDim):
-		self.m_A = self.m_lambda*np.identity(featureDim)
-		self.m_AInv = np.linalg.inv(self.m_A)
+	def pretrainSelectInit(self, train, foldIndex):
+		
+		initList = self.m_initialExList[foldIndex]
+		
+		print("initList", initList)
 
-	def update_confidence_bound(self, exId):
-		self.m_A += np.outer(self.fn[exId], self.fn[exId])
-		self.m_AInv = np.linalg.inv(self.m_A)
+		return initList
 
-	def get_confidence_bound(self, exId):
-		CB = np.sqrt(np.dot(np.dot(self.fn[exId], self.m_AInv), self.fn[exId]))
+	def generateCleanData(self, train):
+		sampledTrainNum = len(train)
+		cleanFeatureTrain = []
+		cleanLabelTrain = []
+		for trainIndex in range(sampledTrainNum):
+			trainID = train[trainIndex]
 
-		return CB
+			transferLabel = self.transferLabel[trainID]
+			trueLabel = self.label[trainID]
+
+			if transferLabel == trueLabel:
+				cleanFeatureTrain.append(self.fn[trainID])
+				cleanLabelTrain.append(transferLabel)
+		
+		cleanFeatureTrain = np.array(cleanFeatureTrain)
+		cleanLabelTrain = np.array(cleanLabelTrain)
+
+		return cleanFeatureTrain, cleanLabelTrain
 
 	def run_CV(self):
 
@@ -166,11 +189,10 @@ class active_learning:
 		coefList = [0 for i in range(10)]
 
 		for foldIndex in range(foldNum):
-			
-			# self.m_clf = LinearSVC(random_state=3)
-			# self.m_clf = LR(fit_intercept=False)
-
-			self.m_clf = LR(random_state=3)
+			if self.m_multipleClass:
+				self.m_clf = LR(multi_class="multinomial", solver='lbfgs',random_state=3,  fit_intercept=False)
+			else:
+				self.m_clf = LR(random_state=3)
 
 			train = []
 			for preFoldIndex in range(foldIndex):
@@ -188,11 +210,19 @@ class active_learning:
 			label_test = self.label[test]
 
 			sampledTrainNum = len(train)
-			# sampledTrainNum = 100
+			# sampledTrainNum = 150
 			train_sampled = random.sample(train, sampledTrainNum)
 
 			fn_train = self.fn[train_sampled]
 			label_train = self.label[train_sampled]
+			transferLabel_train = self.transferLabel[train_sampled]
+
+			cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled)
+			# print("clean data num", len(cleanLabelTrain))
+			# self.m_clf.fit(cleanFeatureTrain, cleanLabelTrain)
+
+			# print("data num", len(transferLabel_train))
+			# self.m_clf.fit(fn_train, transferLabel_train)
 
 			self.m_clf.fit(fn_train, label_train)
 
@@ -228,6 +258,72 @@ class active_learning:
 
 		print(np.mean(totalAccList), np.sqrt(np.var(totalAccList)))
 
+def readTransferLabel(transferLabelFile):
+	f = open(transferLabelFile)
+
+	auditorLabelList = []
+	transferLabelList = []
+	trueLabelList = []
+
+	for rawLine in f:
+		
+		if "transfer" in rawLine:
+			continue
+		
+		line = rawLine.strip().split("\t")
+		lineLen = len(line)
+
+		auditorLabelList.append(float(line[0]))
+		transferLabelList.append(float(line[1]))
+		trueLabelList.append(float(line[2]))
+
+	f.close()
+
+	return auditorLabelList, transferLabelList, trueLabelList
+
+def readFeatureLabelCSV(csvFile):
+    f = open(csvFile)
+
+    firstLine = False
+
+    featureMatrix = []
+    label = []
+
+    firstLine = f.readline()
+    
+    posFeatureMatrix = []
+    posLabel = []
+    negFeatureMatrix = []
+    negLabel = []
+
+    for rawLine in f:
+        line = rawLine.strip().split(",")
+        lineLen = len(line)
+
+        featureList = []
+        for lineIndex in range(lineLen-1):
+            featureVal = float(line[lineIndex])
+            featureList.append(featureVal)
+
+#         featureMatrix.append(featureList)
+        if line[lineLen-1] == "FALSE":
+            negFeatureMatrix.append(featureList)
+            negLabel.append(0.0)
+        else:
+            posFeatureMatrix.append(featureList)
+            # print(line[lineLen-1])
+            posLabel.append(1.0)
+    
+    negFeatureMatrix = random.sample(negFeatureMatrix, len(posLabel))
+    negLabel = random.sample(negLabel, len(posLabel))
+    
+    featureMatrix = np.vstack((negFeatureMatrix, posFeatureMatrix))
+    label = np.hstack((negLabel, posLabel))
+    
+    f.close()
+
+    return featureMatrix, label
+
 def readFeatureLabel(featureLabelFile):
 	f = open(featureLabelFile)
 
@@ -252,149 +348,51 @@ def readFeatureLabel(featureLabelFile):
 
 	return featureMatrix, labelList
 
-def readTransferLabel(transferLabelFile):
-	f = open(transferLabelFile)
+def readSensorData():
+	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
+	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
+	label = tmp[:,-1]
 
-	transferLabelList = []
-	auditorLabelList = []
-	targetLabelList = []
+	fn = get_name_features(raw_pt)
 
-	for rawLine in f:
-		
-		if "transfer" in rawLine:
-			continue
-		
-		line = rawLine.strip().split("\t")
-		lineLen = len(line)
-		
-		auditorLabelList.append(float(line[0]))
-		transferLabelList.append(float(line[1]))
-		targetLabelList.append(float(line[2]))
-
-	f.close()
-
-	return auditorLabelList, transferLabelList, targetLabelList
-
-def readFeatureLabelCSV(csvFile):
-	f = open(csvFile)
-
-	firstLine = False
-
-	featureMatrix = []
-	label = []
-
-	firstLine = f.readline()
-
-	for rawLine in f:
-		line = rawLine.strip().split(",")
-		lineLen = len(line)
-
-		featureList = []
-		for lineIndex in range(lineLen-1):
-			featureVal = float(line[lineIndex])
-			featureList.append(featureVal)
-
-		featureMatrix.append(featureList)
-		if line[lineLen-1] == "FALSE":
-			label.append(0.0)
-		else:
-			# print(line[lineLen-1])
-			label.append(1.0)
-
-	f.close()
-
-	return featureMatrix, label
-
-def readFeatureFile(featureFile, labelIndex):
-	f = open(featureFile)
-
-	featureMatrix = []
-	labelList = []
-
-	for rawLine in f:
-		line = rawLine.strip().split("\t")
-
-		lineLen = len(line)
-
-		featureSample = []
-		for lineIndex in range(lineLen):
-			featureVal = float(line[lineIndex])
-			featureSample.append(featureVal)
-		
-		labelList.append(labelIndex)
-
-		featureMatrix.append(featureSample)
-
-	f.close()
+	featureMatrix = fn
+	labelList = label
 
 	return featureMatrix, labelList
 
 if __name__ == "__main__":
 
-	sourceDataName = "baseball_politicsMisc"
-	targetDataName = "hockey_religionMisc"
+	dataName = "electronics"
 
-	modelName = "passiveLearn_"+sourceDataName+"_"+targetDataName
+	modelName = "offline_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
 	modelVersion = modelName+"_"+timeStamp
-
-	dataName = "20News"
-
 	fileSrc = dataName
-
-	"""
-	 	20 news group
-	"""
-	if dataName == "20News":
-
-		featureFile = "../../dataset/20News/hockey"
-		labelIndex = 0
-		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
-		print(len(labelList0))
-
-		featureFile = "../../dataset/20News/religionMisc"
-		labelIndex = 1
-		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
-		print(len(labelList1))
-		
-		featureMatrix = featureMatrix0+featureMatrix1
-		labelList = labelList0+labelList1
-
-		print(len(labelList))
-
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(labelList)
-
-		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
-
-		fold = 10
-		rounds = 150
-
-		al = active_learning(fold, rounds, featureMatrix, labelArray)
-
-		al.run_CV()
-
 
 	"""
 	 	processedKitchenElectronics
 	"""
 	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
+		featureLabelFile = "../../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
+		transferLabelFile = "../../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
+		transferLabelArray = np.array(transferLabelList)
+	
 		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
 
 		fold = 10
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray, "sentiment_electronics", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray,  transferLabelArray, "sentiment_electronics", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
