@@ -135,7 +135,7 @@ class active_learning:
 
 		return initList
 
-	def generateCleanData(self, train, slabThreshold):
+	def generateCleanData(self, train, slabThreshold, flipSamples_train):
 		sampledTrainNum = len(train)
 		cleanFeatureTrain = []
 		cleanLabelTrain = []
@@ -147,9 +147,10 @@ class active_learning:
 		negLabelNum = 0.0
 
 		
-		flipTrainNum = 150
-		### obtain sampled train instances
-		flipLabelsTrain = random.sample(train, flipTrainNum)
+		flipLabelsTrain = flipSamples_train
+		# flipTrainNum = 150
+		# ### obtain sampled train instances
+		# flipLabelsTrain = random.sample(train, flipTrainNum)
 
 		for trainIndex in range(sampledTrainNum):
 			trainID = train[trainIndex]
@@ -214,6 +215,10 @@ class active_learning:
 		### filter data
 		for trainIndex in range(sampledTrainNum):
 			trainID = train[trainIndex]
+
+			if trainID in flipLabelsTrain:
+				continue
+
 			featureTrain = self.fn[trainID]
 			transferLabel = self.transferLabel[trainID]
 			trueLabel = self.label[trainID]
@@ -247,6 +252,13 @@ class active_learning:
 
 		return cleanFeatureTrain, cleanLabelTrain
 
+	def generateFlipSamples(self, train):
+		flipTrainNum = 150
+		### obtain sampled train instances
+		flipLabelsTrain = random.sample(train, flipTrainNum)
+		flipLabelsTrain = [873, 277, 768, 849, 1972, 943, 1406, 139, 1958, 581, 1773, 1374, 1401, 69, 151, 778, 1284, 536, 770, 287, 1050, 692, 970, 819, 1452, 1648, 1902, 508, 331, 51, 396, 739, 852, 905, 1288, 80, 1392, 962, 382, 877, 1356, 825, 19, 426, 506, 1679, 1563, 103, 1105, 722, 314, 1817, 640, 1992, 345, 365, 1092, 790, 1683, 1639, 74, 226, 588, 659, 976, 1069, 690, 1165, 1850, 446, 63, 1129, 552, 488, 1048, 1301, 783, 1018, 694, 1678, 449, 1478, 1921, 928, 1657, 206, 1110, 1692, 1591, 888, 1113, 994, 1944, 1788, 1326, 1010, 621, 1100, 348, 1742, 990, 1300, 1534, 926, 644, 1906, 808, 368, 1980, 1398, 1008, 1500, 1737, 46, 848, 915, 1175, 1721, 265, 1954, 122, 1044, 865, 1111, 1363, 93, 1325, 1833, 121, 1042, 1273, 484, 1873, 1061, 1518, 393, 1930, 845, 1567, 1267, 1750, 1415, 855, 1845, 1690, 584, 36, 1343, 695, 350]
+		return flipLabelsTrain
+
 	def run_CV(self):
 
 		cvIter = 0
@@ -276,9 +288,9 @@ class active_learning:
 		foldInstanceList.append(foldIndexInstanceList)
 		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		
-		slabThresholdList = np.arange(0.05, 0.3, 0.01)
+		slabThresholdList = np.arange(0.2, 0.3, 0.01)
 		for slabThreshold in slabThresholdList:
-			# print("*************************slabThreshold: %f****************"%slabThreshold)
+			print("*************************slabThreshold: %f****************"%slabThreshold)
 			cvIter = 0
 			# random.seed(3)
 			totalAccList = [0 for i in range(10)]
@@ -315,9 +327,26 @@ class active_learning:
 				label_train = self.label[train_sampled]
 				transferLabel_train = self.transferLabel[train_sampled]
 
-				cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled, slabThreshold)
+				flipSamples_train = self.generateFlipSamples(train)
+
+
+				necessaryFlipNum = 0.0
+				unNecessaryFlipNum = 0.0
+				for trainID in flipSamples_train:
+					if self.label[trainID] == self.transferLabel[trainID]:
+						unNecessaryFlipNum += 1.0
+					else:
+						necessaryFlipNum += 1.0
+
+				print(necessaryFlipNum, unNecessaryFlipNum)
+				# exit()
+				cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled, slabThreshold, flipSamples_train)
+
+				trainFeature = np.vstack((cleanFeatureTrain, self.fn[flipSamples_train]))
+				trainLabel = np.hstack((cleanLabelTrain, self.label[flipSamples_train]))
+
 				# print("clean data num", len(cleanLabelTrain))
-				self.m_clf.fit(cleanFeatureTrain, cleanLabelTrain)
+				self.m_clf.fit(trainFeature, trainLabel)
 
 				# print("data num", len(transferLabel_train))
 				# self.m_clf.fit(fn_train, transferLabel_train)

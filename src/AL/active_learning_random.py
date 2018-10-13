@@ -324,9 +324,34 @@ def readSensorData():
 
 	return featureMatrix, labelList
 
+def readFeatureFile(featureFile, labelIndex):
+	f = open(featureFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+		
+		labelList.append(labelIndex)
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
+
 if __name__ == "__main__":
 
-	dataName = "simulation"
+	dataName = "20News"
 
 	modelName = "activeLearning_random_"+dataName
 	timeStamp = datetime.now()
@@ -404,6 +429,36 @@ if __name__ == "__main__":
 
 		initialExList = []
 		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "20News":
+		featureFile = "../../dataset/20News/baseball"
+		labelIndex = 0
+		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList0))
+
+		featureFile = "../../dataset/20News/politicsMisc"
+		labelIndex = 1
+		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList1))
+		
+		featureMatrix = featureMatrix0+featureMatrix1
+		labelList = labelList0+labelList1
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(labelList)
+
+		initialExList = []
+		initialExList = [[1411, 435, 1390], [1564, 216, 576], [563, 213, 1746], [4, 1162, 1593], [47, 1754, 71], [360, 1512, 1128], [86, 873, 1126], [551, 1540, 437], [1175, 579, 82], [678, 1575, 1306]]
 
 		fold = 10
 		rounds = 150

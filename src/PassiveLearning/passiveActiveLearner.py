@@ -314,6 +314,7 @@ if __name__ == "__main__":
 	sourceFeatureMatrix = np.array(sourceFeatureMatrix)
 
 	print('class count of true source labels of all ex:\n', ct(sourceLabel))
+	print("")
 
 	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
 	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)

@@ -31,18 +31,8 @@ from sklearn.model_selection import train_test_split
 
 from datetime import datetime
 
-# sourceDataName = "electronics"
-# targetDataName = "kitchen"
-
-sourceDataName = "books"
-targetDataName = "electronics"
-
-dataName = sourceDataName+"--"+targetDataName
-modelName = "activeLearning_offline_transfer_"+dataName
-timeStamp = datetime.now()
-timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
-
-modelVersion = modelName+"_"+timeStamp
+sourceDataName = "hockey_religionMisc"
+targetDataName = "baseball_politicsMisc"
 
 random.seed(10)
 np.random.seed(10)
@@ -61,7 +51,7 @@ def get_name_features(names):
 		fn = cv.fit_transform(name).toarray()
 
 		return fn
-class active_learning:
+class learner:
 
 	def __init__(self, fold, rounds, source_fn, source_label, target_fn, target_label):
 
@@ -241,31 +231,83 @@ def readFeatureLabelCSV(csvFile):
 
 	return featureMatrix, label
 
+def readFeatureFile(featureFile, labelIndex):
+	f = open(featureFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+		
+		labelList.append(labelIndex)
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
 if __name__ == "__main__":
 
-	###processedKitchenElectronics electronics ---> kitchen
+	dataName = "20News"
+	modelName = "generateWeakLabels_"+dataName
+	timeStamp = datetime.now()
+	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
-	###processedBooksElectronics books ---> electronics
-	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
-	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
+	modelVersion = modelName+"_"+timeStamp
 
-	sourceLabel = np.array(sourceLabelList)
-	sourceFeatureMatrix = np.array(sourceFeatureMatrix)
+	featureFile = "../../../dataset/20News/hockey"
+	labelIndex = 0
+	featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+	print(len(labelList0))
 
-	print('class count of true source labels of all ex:\n', ct(sourceLabel))
+	featureFile = "../../../dataset/20News/religionMisc"
+	labelIndex = 1
+	featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+	print(len(labelList1))
+	
+	featureMatrix = featureMatrix0+featureMatrix1
+	labelList = labelList0+labelList1
 
-	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
-	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
+	print(len(labelList))
 
-	targetLabel = np.array(targetLabelList)
-	targetFeatureMatrix = np.array(targetFeatureMatrix)
+	sourceFeatureMatrix = np.array(featureMatrix)
+	sourceLabel = np.array(labelList)
 
-	print('class count of true target labels of all ex:\n', ct(targetLabel))
+	print('class count of source labels of all ex:\n', ct(sourceLabel))
+
+	featureFile = "../../../dataset/20News/baseball"
+	labelIndex = 0
+	featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+	print(len(labelList0))
+
+	featureFile = "../../../dataset/20News/politicsMisc"
+	labelIndex = 1
+	featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+	print(len(labelList1))
+	
+	featureMatrix = featureMatrix0+featureMatrix1
+	labelList = labelList0+labelList1
+
+	print(len(labelList))
+
+	targetFeatureMatrix = np.array(featureMatrix)
+	targetLabel = np.array(labelList)
+
+	print('class count of target labels of all ex:\n', ct(targetLabel))
 
 	fold = 1
 	rounds = 100
-	al = active_learning(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
+	al = learner(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
 
-	dataDir = "../../dataset/processed_acl/processedBooksElectronics/"
+	dataDir = "../../../dataset/20News"
 
-	al.run_CV(dataDir, "books", "electronics")
+	al.run_CV(dataDir, "hockey_religionMisc", "baseball_politicsMisc")

@@ -228,7 +228,7 @@ class _ProactiveLearning:
 		auditorPosProb = self.m_auditor.predict_proba(self.m_targetNameFeature[exId].reshape(1, -1))[0][1]
 
 		transferFlag = False
-		if auditorPosProb > 0.5:
+		if auditorPosProb > 0.8:
 			transferFlag = True
 		else:
 			transferFlag = False
@@ -253,7 +253,7 @@ class _ProactiveLearning:
 
 		return acc
 		
-	def addExtraWeakLabels(self, transferFeatureList, transferFlagList, targetNameFeatureTest, transferLabelTest, targetLabelTest):
+	def addExtraWeakLabels(self, transferFeatureList, transferFlagList, targetNameFeatureTest, transferLabelTest, targetLabelTest, iteration):
 		extraIDList = self.m_unlabeledIDList
 		extraNum = len(extraIDList)
 
@@ -268,6 +268,7 @@ class _ProactiveLearning:
 		correctTransferLabelNum = 0.0
 		transferNum = 0
 
+		print("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~~~"%iteration)
 		for extraIndex in range(extraNum):
 			extraID = extraIDList[extraIndex]
 
@@ -282,19 +283,33 @@ class _ProactiveLearning:
 				weakLabel.append(predLabel)
 			# else:
 			# 	extraLabel.append(self.m_targetLabel[extraID])
-		# print("extra auditor acc", correctTransferLabelNum*1.0/extraNum, correctTransferLabelNum*1.0/transferNum)
+		
 		weakNameFeature = self.m_targetNameFeature[weakIDList]
 		weakLabel = np.array(weakLabel)
 
-		print("weak num", len(weakLabel), correctTransferLabelNum*1.0/len(weakLabel), correctTransferLabelNum*1.0/len(weakLabel))
+		weakLabelNum = len(weakLabel)
+		if weakLabelNum == 0.0:
+			print("weak label num", weakLabelNum)
+			trainNameFeature = strongNameFeature
+			trainLabel = strongLabel
 
-		trainNameFeature = np.vstack((strongNameFeature, weakNameFeature))
-		trainLabel = np.hstack((strongLabel, weakLabel))
+			### clf updated
+			trainAcc = self.get_pred_acc(targetNameFeatureTest, targetLabelTest, trainNameFeature, trainLabel)
 
-		### clf updated
-		trainAcc = self.get_pred_acc(targetNameFeatureTest, targetLabelTest, trainNameFeature, trainLabel)
+			print("trainAcc", trainAcc)
+		else:
 
-		print("trainAcc", trainAcc)
+			print("weak label num", weakLabelNum, "extra correct labels ratio", correctTransferLabelNum*1.0/weakLabelNum)
+		
+			trainNameFeature = np.vstack((strongNameFeature, weakNameFeature))
+			trainLabel = np.hstack((strongLabel, weakLabel))
+
+			### clf updated
+			trainAcc = self.get_pred_acc(targetNameFeatureTest, targetLabelTest, trainNameFeature, trainLabel)
+
+			print("trainAcc", trainAcc)
+		
+		print("###############################################")
 		return trainAcc
 
 	def setInitialExList(self, initialExList):
@@ -468,7 +483,7 @@ class _ProactiveLearning:
 
 				# acc = self.get_pred_acc(targetNameFeatureTest, targetLabelTest, targetNameFeatureIter, targetLabelIter)
 				# totalAccList[cvIter].append(acc)
-				extraAcc = self.addExtraWeakLabels(transferFeatureList, transferFlagList, targetNameFeatureTest, transferLabelTest, targetLabelTest)
+				extraAcc = self.addExtraWeakLabels(transferFeatureList, transferFlagList, targetNameFeatureTest, transferLabelTest, targetLabelTest, queryIter)
 				extraAccList.append(extraAcc)
 					# humanAccList[cvIter].append(acc)
 				queryIter += 1
@@ -654,40 +669,44 @@ def readSensorData():
 	return featureMatrix, labelList
 
 if __name__ == "__main__":
-	dataName = "simulation"
+	dataName = "electronics"
+
 	modelName = "AAWS_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 
 	modelVersion = modelName+"_"+timeStamp
-	fileSrc = dataName
 
-	if dataName == "simulation":
-		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+	"""
+	 	processedKitchenElectronics
+	"""
+	# featureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+dataName
 
-		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
+	# featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
-		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
 
-		transferLabelFile1 = "../../dataset/synthetic/simulatedTransferLabel_1_500_20_2.txt"
-		auditorLabelList1, transferLabelList1, trueLabelList = readTransferLabel(transferLabelFile1)
+	featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
 
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(trueLabelList)
+	featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelArray = np.array(transferLabelList0)
+	transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/transferLabel_books--electronics.txt"
+	auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
 
-		initialExList = []
-		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
+	featureMatrix = np.array(featureMatrix)
+	labelArray = np.array(labelList)
 
-		fold = 10
-		rounds = 150
+	transferLabelArray = np.array(transferLabelList)
+	print("number of types", len(set(labelArray)))
+	print('class count of true labels of all ex:\n', ct(transferLabelArray))
+	
+	initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
 
-		multipleClassFlag = False
-		al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "synthetic", multipleClassFlag)
+	fold = 10
+	rounds = 150
 
-		al.setInitialExList(initialExList)
+	multipleClassFlag = False
+	al = _ProactiveLearning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "sentiment_electronics", multipleClassFlag)
 
-		al.run_CV()
+	al.setInitialExList(initialExList)
 
+	al.run_CV()

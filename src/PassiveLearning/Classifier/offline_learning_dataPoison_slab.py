@@ -182,7 +182,7 @@ class active_learning:
 
 		featureResidual = posExpectedFeatureTrain-negExpectedFeatureTrain
 
-		featureDisList = []
+		poisonScoreList = []
 
 		correctCleanNum = 0.0
 
@@ -209,14 +209,14 @@ class active_learning:
 				if transferLabel == trueLabel:
 					correctCleanNum += 1.0
 
-			featureDisList.append(featureDis)
+			poisonScoreList.append(featureDis)
 
 			# if transferLabel == trueLabel:
 			# 	cleanFeatureTrain.append(self.fn[trainID])
 			# 	cleanLabelTrain.append(transferLabel)
+		print("poisonScoreList", np.mean(poisonScoreList), np.median(poisonScoreList), np.sqrt(np.var(poisonScoreList)), "min, max", np.min(poisonScoreList), np.max(poisonScoreList))
+		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain), sampledTrainNum)
 		
-		print("featureDisList", np.mean(featureDisList), np.median(featureDisList), np.sqrt(np.var(featureDisList)))
-		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
 		cleanFeatureTrain = np.array(cleanFeatureTrain)
 		cleanLabelTrain = np.array(cleanLabelTrain)
 
@@ -302,7 +302,7 @@ class active_learning:
 			# 	cleanFeatureTrain.append(self.fn[trainID])
 			# 	cleanLabelTrain.append(transferLabel)
 		
-		print("poisonScoreList", np.mean(poisonScoreList), np.median(poisonScoreList), np.sqrt(np.var(poisonScoreList)))
+		print("poisonScoreList", np.mean(poisonScoreList), np.median(poisonScoreList), np.sqrt(np.var(poisonScoreList)), "min, max", np.min(poisonScoreList), np.max(poisonScoreList))
 		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
 		cleanFeatureTrain = np.array(cleanFeatureTrain)
 		cleanLabelTrain = np.array(cleanLabelTrain)
@@ -340,10 +340,12 @@ class active_learning:
 		
 		thresholdList = []
 		if self.m_category == "synthetic":
-			thresholdList = np.arange(3.5, 4.5, 0.1)
+			thresholdList = np.arange(1.0090, 1.0095, 0.0001)
 
 		if self.m_category == "text":
-			thresholdList = np.arange(0.40, 0.41, 0.01)
+			# thresholdList = np.arange(0.0030, 0.0040, 0.0001)
+			thresholdList = np.arange(0.18, 0.24, 0.01)
+
 		for slabThreshold in thresholdList:
 			print("*************************threshold: %f****************"%slabThreshold)
 			cvIter = 0
@@ -400,7 +402,7 @@ class active_learning:
 				# coefList[cvIter] = self.m_clf.coef_
 
 				label_preds = self.m_clf.predict(fn_test)
-				print(label_preds)
+				# print(label_preds)
 				acc = accuracy_score(label_test, label_preds)
 
 				totalAccList[cvIter] = acc
@@ -520,6 +522,30 @@ def readFeatureLabel(featureLabelFile):
 
 	return featureMatrix, labelList
 
+def readFeatureFile(featureFile, labelIndex):
+	f = open(featureFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+		
+		labelList.append(labelIndex)
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
 def readSensorData():
 	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
 	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
@@ -534,7 +560,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "simulation"
+	dataName = "electronics"
 
 	modelName = "offline_"+dataName
 	timeStamp = datetime.now()
@@ -618,6 +644,42 @@ if __name__ == "__main__":
 
 		multipleClassFlag = False
 		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "20News":
+		featureFile = "../../../dataset/20News/baseball"
+		labelIndex = 0
+		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList0))
+
+		featureFile = "../../../dataset/20News/politicsMisc"
+		labelIndex = 1
+		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList1))
+		
+		featureMatrix = featureMatrix0+featureMatrix1
+		labelList = labelList0+labelList1
+
+		transferLabelFile0 = "../../../dataset/20News/transferLabel_hockey_religionMisc--baseball_politicsMisc.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+
+		transferLabelArray = np.array(transferLabelList)
+		auditorLabelArray = np.array(auditorLabelList)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "text", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

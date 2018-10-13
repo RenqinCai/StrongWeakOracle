@@ -10,6 +10,16 @@ vectors = vectorizer.fit_transform(newsgroups.data)
 featureNameList = vectorizer.get_feature_names()
 featureNum = len(featureNameList)
 
+featureFile = "baseball_hockey_politicsMisc_religionMisc_vocab"
+f = open(featureFile, "w")
+
+featureNameMap = {}
+for featureIndex in range(featureNum):
+    featureName = featureNameList[featureIndex]
+    featureNameMap[featureIndex] = featureName
+    f.write(featureName+":"+str(featureIndex)+"\n")
+f.close()
+
 newsNum = vectors.shape[0]
 labelList = newsgroups.target
 

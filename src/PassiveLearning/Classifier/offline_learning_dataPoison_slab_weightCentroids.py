@@ -1,5 +1,5 @@
 """
-offline learning via considering weak labels as data poison and remove poisoned data to train a better classifier, compare distance of features via slab threshold
+offline learning via considering weak labels as data poison and remove poisoned data to train a better classifier, compare distance of features via slab threshold, Use weight centroids.
 """
 
 import numpy as np
@@ -135,13 +135,57 @@ class active_learning:
 
 		return initList
 
-	def generateCleanData(self, train, slabThreshold):
+	def generateCleanDataBySlab(self, train, slabThreshold):
+		print("slab filter")
 		sampledTrainNum = len(train)
 		cleanFeatureTrain = []
 		cleanLabelTrain = []
-		correctCleanNum = 0.0
+
+		posExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+		negExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+
+		posLabelNum = 0.0
+		negLabelNum = 0.0
+
+		"""
+		obtain expected feature for pos and neg classes
+		"""
+		for trainIndex in range(sampledTrainNum):
+			trainID = train[trainIndex]
+
+			feature = self.fn[trainID]
+
+			trueLabel = self.label[trainID]
+			transferLabel = self.transferLabel[trainID]
+
+			# if trueLabel == 1:
+			# 	posExpectedFeatureTrain += feature
+			# 	posLabelNum += 1.0
+			# else:
+			# 	negExpectedFeatureTrain += feature
+			# 	negLabelNum += 1.0
+
+			if transferLabel == 1:
+				posExpectedFeatureTrain += feature
+				posLabelNum += 1.0
+			else:
+				negExpectedFeatureTrain += feature
+				negLabelNum += 1.0
+
+		posExpectedFeatureTrain /= posLabelNum
+		negExpectedFeatureTrain /= negLabelNum
+
+		### obtain threshold
+
+		slabDisThreshold = slabThreshold
+		sphereDisThreshold = 0.0
+
+		featureResidual = posExpectedFeatureTrain-negExpectedFeatureTrain
 
 		poisonScoreList = []
+
+		correctCleanNum = 0.0
+
 		### filter data
 		for trainIndex in range(sampledTrainNum):
 			trainID = train[trainIndex]
@@ -149,22 +193,128 @@ class active_learning:
 			transferLabel = self.transferLabel[trainID]
 			trueLabel = self.label[trainID]
 
-			predStrongLabel = self.m_weakTransferClf.predict(featureTrain.reshape(1, -1))[0]
-			if predStrongLabel == transferLabel:
+			interFeatureDis = 0.0
+			intraFeatureDis = 0.0
+
+			featureDis = 0.0
+			if transferLabel == 1.0:
+				intraFeatureDis = featureTrain-posExpectedFeatureTrain
+				interFeatureDis = featureTrain-negExpectedFeatureTrain
+
+			if transferLabel == 0.0:
+				intraFeatureDis = featureTrain-negExpectedFeatureTrain
+				interFeatureDis = featureTrain-posExpectedFeatureTrain
+
+
+			intraPoisonScore = np.abs(np.dot(intraFeatureDis, featureResidual))
+			interPoisonScore = np.abs(np.dot(interFeatureDis, featureResidual))
+
+			poisonScore = intraPoisonScore-interPoisonScore+1.0
+			if poisonScore < slabDisThreshold:
 				cleanFeatureTrain.append(self.fn[trainID])
 				cleanLabelTrain.append(transferLabel)
 
 				if transferLabel == trueLabel:
 					correctCleanNum += 1.0
 
-			# poisonScoreList.append(poisonScore)
+			poisonScoreList.append(poisonScore)
+
+			# if transferLabel == trueLabel:
+			# 	cleanFeatureTrain.append(self.fn[trainID])
+			# 	cleanLabelTrain.append(transferLabel)
+		print("poisonScoreList", np.mean(poisonScoreList), np.median(poisonScoreList), np.sqrt(np.var(poisonScoreList)), "min, max", np.min(poisonScoreList), np.max(poisonScoreList))
+		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain), sampledTrainNum)
+		
+		cleanFeatureTrain = np.array(cleanFeatureTrain)
+		cleanLabelTrain = np.array(cleanLabelTrain)
+
+		return cleanFeatureTrain, cleanLabelTrain
+
+	def generateCleanDataBySphere(self, train, sphereThreshold):
+		print("sphere filter")
+		sampledTrainNum = len(train)
+		cleanFeatureTrain = []
+		cleanLabelTrain = []
+
+		posExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+		negExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+
+		posLabelNum = 0.0
+		negLabelNum = 0.0
+
+		predictLabel = self.m_clf.predict_proba(self.fn)
+
+		"""
+		obtain expected feature for pos and neg classes
+		"""
+		for trainIndex in range(sampledTrainNum):
+			trainID = train[trainIndex]
+
+			feature = self.fn[trainID]
+
+			trueLabel = self.label[trainID]
+			transferLabel = self.transferLabel[trainID]
+
+			# if trueLabel == 1:
+			# 	posExpectedFeatureTrain += feature
+			# 	posLabelNum += 1.0
+			# else:
+			# 	negExpectedFeatureTrain += feature
+			# 	negLabelNum += 1.0
+
+			if transferLabel == 1:
+				labelReliability = predictLabel[trainID][1]
+				posExpectedFeatureTrain += feature*labelReliability
+				posLabelNum += 1.0*labelReliability
+			else:
+				labelReliability = predictLabel[trainID][0]
+				negExpectedFeatureTrain += feature*labelReliability
+				negLabelNum += 1.0*labelReliability
+
+		posExpectedFeatureTrain /= posLabelNum
+		negExpectedFeatureTrain /= negLabelNum
+
+		### obtain threshold
+
+		slabDisThreshold = sphereThreshold
+		sphereDisThreshold = 0.0
+
+		featureResidual = posExpectedFeatureTrain-negExpectedFeatureTrain
+
+		poisonScoreList = []
+
+		correctCleanNum = 0.0
+
+		### filter data
+		for trainIndex in range(sampledTrainNum):
+			trainID = train[trainIndex]
+			featureTrain = self.fn[trainID]
+			transferLabel = self.transferLabel[trainID]
+			trueLabel = self.label[trainID]
+
+			featureDis = 0.0
+			if transferLabel == 1.0:
+				featureDis = featureTrain-posExpectedFeatureTrain
+
+			if transferLabel == 0.0:
+				featureDis = featureTrain-negExpectedFeatureTrain
+
+
+			poisonScore = np.linalg.norm(featureDis)
+			if poisonScore < slabDisThreshold:
+				cleanFeatureTrain.append(self.fn[trainID])
+				cleanLabelTrain.append(transferLabel)
+
+				if transferLabel == trueLabel:
+					correctCleanNum += 1.0
+
+			poisonScoreList.append(poisonScore)
 
 			# if transferLabel == trueLabel:
 			# 	cleanFeatureTrain.append(self.fn[trainID])
 			# 	cleanLabelTrain.append(transferLabel)
 		
-		# print("featureDisList", np.mean(featureDisList), np.median(featureDisList), np.sqrt(np.var(featureDisList)))
-		print(np.unique(cleanLabelTrain), cleanLabelTrain)
+		print("poisonScoreList", np.mean(poisonScoreList), np.median(poisonScoreList), np.sqrt(np.var(poisonScoreList)), "min, max", np.min(poisonScoreList), np.max(poisonScoreList))
 		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
 		cleanFeatureTrain = np.array(cleanFeatureTrain)
 		cleanLabelTrain = np.array(cleanLabelTrain)
@@ -200,10 +350,15 @@ class active_learning:
 		foldInstanceList.append(foldIndexInstanceList)
 		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		
-		slabThresholdList = np.arange(0.05, 0.3, 0.01)
-		slabThresholdList = [0.2]
-		for slabThreshold in slabThresholdList:
-			# print("*************************slabThreshold: %f****************"%slabThreshold)
+		thresholdList = []
+		if self.m_category == "synthetic":
+			thresholdList = np.arange(1.0090, 1.0095, 0.0001)
+
+		if self.m_category == "text":
+			# thresholdList = np.arange(0.0030, 0.0040, 0.0001)
+			thresholdList = np.arange(0.90, 1.30, 0.05)
+		for slabThreshold in thresholdList:
+			print("*************************threshold: %f****************"%slabThreshold)
 			cvIter = 0
 			# random.seed(3)
 			totalAccList = [0 for i in range(10)]
@@ -225,7 +380,7 @@ class active_learning:
 				for postFoldIndex in range(foldIndex+1, foldNum):
 					train.extend(foldInstanceList[postFoldIndex])
 
-				# trainNum = int(totalInstanceNum*0.9)
+				trainNum = int(totalInstanceNum*0.9)
 				
 				# print(test)
 				fn_test = self.fn[test]
@@ -240,10 +395,15 @@ class active_learning:
 				label_train = self.label[train_sampled]
 				transferLabel_train = self.transferLabel[train_sampled]
 
-				self.m_weakTransferClf = LR(random_state=3)
-				self.m_weakTransferClf.fit(fn_train, transferLabel_train)
+				self.m_clf.fit(fn_train, transferLabel_train)
 
-				cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled, slabThreshold)
+				cleanFeatureTrain = None
+				cleanLabelTrain = None
+				if self.m_category == "synthetic":
+					cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySphere(train_sampled, slabThreshold)
+					
+				if self.m_category == "text":
+					cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySlab(train_sampled, slabThreshold)
 				# print("clean data num", len(cleanLabelTrain))
 				self.m_clf.fit(cleanFeatureTrain, cleanLabelTrain)
 
@@ -252,13 +412,13 @@ class active_learning:
 
 				# self.m_clf.fit(fn_train, label_train)
 
-				coefList[cvIter] = self.m_clf.coef_
+				# coefList[cvIter] = self.m_clf.coef_
 
 				label_preds = self.m_clf.predict(fn_test)
+				# print(label_preds)
 				acc = accuracy_score(label_test, label_preds)
 
 				totalAccList[cvIter] = acc
-				print("acc", acc)
 
 				cvIter += 1      
 			
@@ -413,7 +573,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "20News"
+	dataName = "electronics"
 
 	modelName = "offline_"+dataName
 	timeStamp = datetime.now()
@@ -489,9 +649,6 @@ if __name__ == "__main__":
 		labelArray = np.array(trueLabelList)
 		transferLabelArray = np.array(transferLabelList)
 
-		# print(transferLabelArray, np.sum(transferLabelArray), len(transferLabelArray))
-		print("correct transfer ratio", np.sum(auditorLabelList)*1.0/len(auditorLabelList))
-
 		initialExList = []
 		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
 
@@ -540,4 +697,3 @@ if __name__ == "__main__":
 		al.setInitialExList(initialExList)
 
 		al.run_CV()
-

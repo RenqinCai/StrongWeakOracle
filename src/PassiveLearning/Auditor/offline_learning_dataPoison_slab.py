@@ -160,19 +160,19 @@ class active_learning:
 			trueLabel = self.label[trainID]
 			transferLabel = self.transferLabel[trainID]
 
-			if trueLabel == 1:
-				posExpectedFeatureTrain += feature
-				posLabelNum += 1.0
-			else:
-				negExpectedFeatureTrain += feature
-				negLabelNum += 1.0
-
-			# if transferLabel == 1:
+			# if trueLabel == 1:
 			# 	posExpectedFeatureTrain += feature
 			# 	posLabelNum += 1.0
 			# else:
 			# 	negExpectedFeatureTrain += feature
 			# 	negLabelNum += 1.0
+
+			if transferLabel == 1:
+				posExpectedFeatureTrain += feature
+				posLabelNum += 1.0
+			else:
+				negExpectedFeatureTrain += feature
+				negLabelNum += 1.0
 
 		posExpectedFeatureTrain /= posLabelNum
 		negExpectedFeatureTrain /= negLabelNum
@@ -468,7 +468,20 @@ if __name__ == "__main__":
 		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 		transferLabelArray = np.array(transferLabelList)
 		auditorLabelArray = np.array(auditorLabelList)
-	
+		
+		TPWeakLabels = transferLabelArray*2-1.0 == auditorLabelArray
+		TPWeakLabelNum = np.sum(TPWeakLabels)
+		weakLabelPrecision = TPWeakLabelNum*1.0/np.sum(transferLabelArray)
+		print("weakLabelPrecision", weakLabelPrecision)
+
+		TPWeakLabels = transferLabelArray*2-1.0 == auditorLabelArray
+		TPWeakLabelNum = np.sum(TPWeakLabels)
+		weakLabelRecall = TPWeakLabelNum*1.0/np.sum(labelArray)
+		print("weakLabelRecall", weakLabelRecall)
+
+		weakLabelAcc = np.sum(auditorLabelArray)*1.0/len(auditorLabelArray)
+		print("weakLabelAcc", weakLabelAcc)
+
 		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
 
 		fold = 10

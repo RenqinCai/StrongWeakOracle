@@ -86,15 +86,7 @@ class active_learning:
 
 			idScore = maxLabelPredictProb-subMaxLabelPredictProb
 			idScore = -idScore
-			# selectCB = self.get_confidence_bound(unlabeledId)
-			# print("selectCB", self.m_selectCbRate*selectCB)
-			# LCB = maxLabelPredictProb+self.m_selectCbRate*selectCB
-
-			# idScore = np.dot(self.m_clf.coef_, self.fn[unlabeledId])-2*alpha*selectCB
-
-			# idScore = -selectCB
-
-			# print(np.dot(self.m_clf.coef_, self.fn[unlabeledId]), 2*selectCB, 2*alpha*selectCB)
+	
 			unlabeledIdScoreMap[unlabeledId] = idScore
 		# exit()
 		# sortedUnlabeledIdList = sorted(unlabeledIdScoreMap, key=unlabeledIdScoreMap.__getitem__, reverse=True)

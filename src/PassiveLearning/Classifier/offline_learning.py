@@ -207,26 +207,26 @@ class active_learning:
 
 			cvIter += 1      
 		
-		totalACCFile = modelVersion+".txt"
-		f = open(totalACCFile, "w")
-		for i in range(10):
-			f.write(str(totalAccList[i]))
-			# for j in range(totalAlNum):
-			# 	f.write(str(totalAccList[i][j])+"\t")
-			f.write("\n")
-		f.close()
+		# totalACCFile = modelVersion+".txt"
+		# f = open(totalACCFile, "w")
+		# for i in range(10):
+		# 	f.write(str(totalAccList[i]))
+		# 	# for j in range(totalAlNum):
+		# 	# 	f.write(str(totalAccList[i][j])+"\t")
+		# 	f.write("\n")
+		# f.close()
 
-		coefFile = modelVersion+"_coef.txt"
-		f = open(coefFile, "w")
-		for i in range(10):
-			coef4Classifier = coefList[i]
-			coefNum = len(coef4Classifier)
+		# coefFile = modelVersion+"_coef.txt"
+		# f = open(coefFile, "w")
+		# for i in range(10):
+		# 	coef4Classifier = coefList[i]
+		# 	coefNum = len(coef4Classifier)
 
-			for coefIndex in range(coefNum):
-				f.write(str(coef4Classifier[coefIndex])+"\t")
-			f.write("\n")
+		# 	for coefIndex in range(coefNum):
+		# 		f.write(str(coef4Classifier[coefIndex])+"\t")
+		# 	f.write("\n")
 
-		f.close()
+		# f.close()
 
 		print(np.mean(totalAccList), np.sqrt(np.var(totalAccList)))
 
@@ -332,9 +332,33 @@ def readSensorData():
 
 	return featureMatrix, labelList
 
+def readFeatureFile(featureFile, labelIndex):
+	f = open(featureFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+		
+		labelList.append(labelIndex)
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
 if __name__ == "__main__":
 
-	dataName = "electronics"
+	dataName = "20News"
 
 	modelName = "offline_"+dataName
 	timeStamp = datetime.now()
@@ -364,7 +388,7 @@ if __name__ == "__main__":
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, transferLabelArray, "sentiment_electronics", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "text", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
@@ -417,6 +441,42 @@ if __name__ == "__main__":
 
 		multipleClassFlag = False
 		al = active_learning(fold, rounds, featureMatrix, labelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "20News":
+		featureFile = "../../../dataset/20News/baseball"
+		labelIndex = 0
+		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList0))
+
+		featureFile = "../../../dataset/20News/politicsMisc"
+		labelIndex = 1
+		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList1))
+		
+		featureMatrix = featureMatrix0+featureMatrix1
+		labelList = labelList0+labelList1
+
+		transferLabelFile0 = "../../../dataset/20News/transferLabel_hockey_religionMisc--baseball_politicsMisc.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+
+		transferLabelArray = np.array(transferLabelList)
+		auditorLabelArray = np.array(auditorLabelList)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "text", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

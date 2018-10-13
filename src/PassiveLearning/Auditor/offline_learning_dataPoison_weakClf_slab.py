@@ -160,19 +160,19 @@ class active_learning:
 			trueLabel = self.label[trainID]
 			transferLabel = self.transferLabel[trainID]
 
-			if trueLabel == 1:
-				posExpectedFeatureTrain += feature
-				posLabelNum += 1.0
-			else:
-				negExpectedFeatureTrain += feature
-				negLabelNum += 1.0
-
-			# if transferLabel == 1:
+			# if trueLabel == 1:
 			# 	posExpectedFeatureTrain += feature
 			# 	posLabelNum += 1.0
 			# else:
 			# 	negExpectedFeatureTrain += feature
 			# 	negLabelNum += 1.0
+
+			if transferLabel == 1:
+				posExpectedFeatureTrain += feature
+				posLabelNum += 1.0
+			else:
+				negExpectedFeatureTrain += feature
+				negLabelNum += 1.0
 
 		posExpectedFeatureTrain /= posLabelNum
 		negExpectedFeatureTrain /= negLabelNum
@@ -190,43 +190,37 @@ class active_learning:
 
 		return featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain
 
-		# ### filter data
-		# for trainIndex in range(sampledTrainNum):
-		# 	trainID = train[trainIndex]
-		# 	featureTrain = self.fn[trainID]
-		# 	transferLabel = self.transferLabel[trainID]
-		# 	trueLabel = self.label[trainID]
-
-		# 	featureDis = 0.0
-		# 	if transferLabel == 1.0:
-		# 		featureDis = featureTrain-posExpectedFeatureTrain
-
-		# 	if transferLabel == 0.0:
-		# 		featureDis = featureTrain-negExpectedFeatureTrain
-
-
-		# 	featureDis = np.abs(np.dot(featureDis, featureResidual))
-		# 	if featureDis < slabDisThreshold:
-		# 		cleanFeatureTrain.append(self.fn[trainID])
-		# 		cleanLabelTrain.append(transferLabel)
-
-		# 		if transferLabel == trueLabel:
-		# 			correctCleanNum += 1.0
-
-		# 	featureDisList.append(featureDis)
-
-		# 	# if transferLabel == trueLabel:
-		# 	# 	cleanFeatureTrain.append(self.fn[trainID])
-		# 	# 	cleanLabelTrain.append(transferLabel)
-		
-		# # print("featureDisList", np.mean(featureDisList), np.median(featureDisList), np.sqrt(np.var(featureDisList)))
-		# # print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
-		# cleanFeatureTrain = np.array(cleanFeatureTrain)
-		# cleanLabelTrain = np.array(cleanLabelTrain)
-
-		# return cleanFeatureTrain, cleanLabelTrain
-
 	def getPredSlab(self, test, slabDisThreshold, featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain):
+		sampledTestNum = len(test)
+		predAuditorLabelList = []
+
+		poisonScoreList = []
+
+		for testIndex in range(sampledTestNum):
+			testID = test[testIndex]
+			featureTrain = self.fn[testID]
+			transferLabel = self.transferLabel[testID]
+			trueLabel = self.label[testID]
+
+			featureDis = 0.0
+			if transferLabel == 1.0:
+				featureDis = featureTrain-posExpectedFeatureTrain
+
+			if transferLabel == 0.0:
+				featureDis = featureTrain-negExpectedFeatureTrain
+
+			poisonScore = np.abs(np.dot(featureDis, featureResidual))
+			poisonScoreList.append(poisonScore)
+			if poisonScore < slabDisThreshold:
+				predAuditorLabelList.append(1.0)
+			else:
+				predAuditorLabelList.append(0.0)
+		
+		print("poisonScoreList", np.min(poisonScoreList), np.max(poisonScoreList), np.mean(poisonScoreList), np.sqrt(np.var(poisonScoreList)))
+
+		return predAuditorLabelList
+
+	def getPredSphere(self, test, sphereDisThreshold, featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain):
 		sampledTestNum = len(test)
 		predAuditorLabelList = []
 
@@ -243,8 +237,8 @@ class active_learning:
 			if transferLabel == 0.0:
 				featureDis = featureTrain-negExpectedFeatureTrain
 
-			poisonScore = np.abs(np.dot(featureDis, featureResidual))
-			if poisonScore < slabDisThreshold:
+			featureDis = np.linalg.norm(featureDis)
+			if featureDis < sphereDisThreshold:
 				predAuditorLabelList.append(1.0)
 			else:
 				predAuditorLabelList.append(0.0)
@@ -289,7 +283,7 @@ class active_learning:
 		# 			correctLinearModel += 1.0
 		
 		# print("correctLinearModel", correctLinearModel, "\t", "wrongLinearModel", wrongLinearModel)
-		print(len(posDistanceList)+len(negDistanceList), "pos distanceList", np.mean(posDistanceList), np.sqrt(np.var(posDistanceList)), "neg distanceList", np.mean(negDistanceList), np.sqrt(np.var(negDistanceList)))		
+		# print(len(posDistanceList)+len(negDistanceList), "pos distanceList", np.mean(posDistanceList), np.sqrt(np.var(posDistanceList)), "neg distanceList", np.mean(negDistanceList), np.sqrt(np.var(negDistanceList)))		
 
 	def compareFP(self, predAuditorLabelSlab, predAuditorLabelWeakClf, auditorLabelTest, test):
 
@@ -313,7 +307,7 @@ class active_learning:
 			featureTest = self.fn[testID]
 			predLabelLinear = np.dot(self.m_weakTransferClf.coef_, featureTest)+self.m_weakTransferClf.intercept_
 
-			print("predLabelLinear", predLabelLinear, self.transferLabel[testID])
+			# print("predLabelLinear", predLabelLinear, self.transferLabel[testID])
 
 	def run_CV(self):
 
@@ -340,9 +334,16 @@ class active_learning:
 		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		
 		slabThresholdList = np.arange(0.2, 0.3, 0.01)
-		slabThresholdList = [0.22]
+		slabThresholdList = [0.0188]
+		if self.m_category == "synthetic":
+			print("sphere")
+			slabThresholdList = np.arange(0.05, 0.5, 0.05) ##0.25
+
+		if self.m_category == "text":
+			print("slab")
+			slabThresholdList = [0.73]
 		for slabThreshold in slabThresholdList:
-			print("*************************slabThreshold: %f****************"%slabThreshold)
+			print("*************************Threshold: %f****************"%slabThreshold)
 			cvIter = 0
 			# random.seed(3)
 			totalAccList_slab = [0 for i in range(10)]
@@ -402,40 +403,78 @@ class active_learning:
 				transferLabel_train = self.transferLabel[train_sampled]
 
 				### slab
-				featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain = self.generateCleanData(train_sampled, slabThreshold)
-				predAuditorLabelList_slab = self.getPredSlab(test, slabThreshold, featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain)
-				predAuditorLabelList_slab = np.array(predAuditorLabelList_slab)
-				
-				acc = accuracy_score(auditorLabel_test, predAuditorLabelList_slab)
-				precision = precision_score(auditorLabel_test, predAuditorLabelList_slab)
-				recall = recall_score(auditorLabel_test, predAuditorLabelList_slab)
+				if self.m_category == "text":
+					featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain = self.generateCleanData(train_sampled, slabThreshold)
+					predAuditorLabelList_slab = self.getPredSlab(test, slabThreshold, featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain)
+					predAuditorLabelList_slab = np.array(predAuditorLabelList_slab)
+					
+					acc = accuracy_score(auditorLabel_test, predAuditorLabelList_slab)
+					precision = precision_score(auditorLabel_test, predAuditorLabelList_slab)
+					recall = recall_score(auditorLabel_test, predAuditorLabelList_slab)
 
-				transferWeakLabelNum = np.sum(predAuditorLabelList_slab)
+					transferWeakLabelNum = np.sum(predAuditorLabelList_slab)
 
-				TP = np.sum(auditorLabel_test*2-1.0==predAuditorLabelList_slab)
-				FP = transferWeakLabelNum-TP
+					TP = np.sum(auditorLabel_test*2-1.0==predAuditorLabelList_slab)
+					FP = transferWeakLabelNum-TP
 
-				FP_s = np.sum(auditorLabel_test+1.0 == predAuditorLabelList_slab)
-				if FP != FP_s:
-					print("error FP")
+					FP_s = np.sum(auditorLabel_test+1.0 == predAuditorLabelList_slab)
+					if FP != FP_s:
+						print("error FP")
 
-				TN = np.sum(auditorLabel_test*2-1.0 == predAuditorLabelList_slab-1.0)
-				FN = len(predAuditorLabelList_slab)-transferWeakLabelNum-TN
+					TN = np.sum(auditorLabel_test*2-1.0 == predAuditorLabelList_slab-1.0)
+					FN = len(predAuditorLabelList_slab)-transferWeakLabelNum-TN
 
-				FN_s = np.sum(auditorLabel_test == predAuditorLabelList_slab+1.0)
+					FN_s = np.sum(auditorLabel_test == predAuditorLabelList_slab+1.0)
 
-				if FN != FN_s:
-					print("error FN")
+					if FN != FN_s:
+						print("error FN")
 
-				totalTPList_slab[cvIter] = TP
-				totalFPList_slab[cvIter] = FP
-				totalTNList_slab[cvIter] = TN
-				totalFNList_slab[cvIter] = FN
+					totalTPList_slab[cvIter] = TP
+					totalFPList_slab[cvIter] = FP
+					totalTNList_slab[cvIter] = TN
+					totalFNList_slab[cvIter] = FN
 
-				totalAccList_slab[cvIter] = acc
-				totalPrecisionList_slab[cvIter] = precision
-				totalRecallList_slab[cvIter] = recall
-				totalTransferNumList_slab[cvIter] = transferWeakLabelNum
+					totalAccList_slab[cvIter] = acc
+					totalPrecisionList_slab[cvIter] = precision
+					totalRecallList_slab[cvIter] = recall
+					totalTransferNumList_slab[cvIter] = transferWeakLabelNum
+
+				### sphere
+				if self.m_category == "synthetic":
+					featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain = self.generateCleanData(train_sampled, slabThreshold)
+					predAuditorLabelList_slab = self.getPredSlab(test, slabThreshold, featureResidual, posExpectedFeatureTrain, negExpectedFeatureTrain)
+					predAuditorLabelList_slab = np.array(predAuditorLabelList_slab)
+					
+					acc = accuracy_score(auditorLabel_test, predAuditorLabelList_slab)
+					precision = precision_score(auditorLabel_test, predAuditorLabelList_slab)
+					recall = recall_score(auditorLabel_test, predAuditorLabelList_slab)
+
+					transferWeakLabelNum = np.sum(predAuditorLabelList_slab)
+
+					TP = np.sum(auditorLabel_test*2-1.0==predAuditorLabelList_slab)
+					FP = transferWeakLabelNum-TP
+
+					FP_s = np.sum(auditorLabel_test+1.0 == predAuditorLabelList_slab)
+					if FP != FP_s:
+						print("error FP")
+
+					TN = np.sum(auditorLabel_test*2-1.0 == predAuditorLabelList_slab-1.0)
+					FN = len(predAuditorLabelList_slab)-transferWeakLabelNum-TN
+
+					FN_s = np.sum(auditorLabel_test == predAuditorLabelList_slab+1.0)
+
+					if FN != FN_s:
+						print("error FN")
+
+					totalTPList_slab[cvIter] = TP
+					totalFPList_slab[cvIter] = FP
+					totalTNList_slab[cvIter] = TN
+					totalFNList_slab[cvIter] = FN
+
+					totalAccList_slab[cvIter] = acc
+					totalPrecisionList_slab[cvIter] = precision
+					totalRecallList_slab[cvIter] = recall
+					totalTransferNumList_slab[cvIter] = transferWeakLabelNum
 
 				### weakClf
 				self.m_weakTransferClf = LR(random_state=3)
@@ -445,7 +484,9 @@ class active_learning:
 
 				predStrongLabels = self.m_weakTransferClf.predict(fn_test)
 				
-				self.getPred(test)
+				# self.getPred(test)
+
+				# print("predStrongLabels", predStrongLabels)
 
 				predAuditorLabelList = (predStrongLabels==transferLabel_test)
 				
@@ -485,16 +526,16 @@ class active_learning:
 				cvIter += 1      
 
 			""" slab """
-			print("*******slab**********")
+			print("*******slab/sphere**********")
 			print("TP", np.mean(totalTPList_slab), np.sqrt(np.var(totalTPList_slab)))
 			print("FP", np.mean(totalFPList_slab), np.sqrt(np.var(totalFPList_slab)))
 			print("TN", np.mean(totalTNList_slab), np.sqrt(np.var(totalTNList_slab)))
 			print("FN", np.mean(totalFNList_slab), np.sqrt(np.var(totalFNList_slab)))
 
-			print("acc", np.mean(totalAccList_slab), np.sqrt(np.var(totalAccList_slab)))
-			print("precision", np.mean(totalPrecisionList_slab), np.sqrt(np.var(totalPrecisionList_slab)))
-			print("recall", np.mean(totalRecallList_slab), np.sqrt(np.var(totalRecallList_slab)))
-			print("transfer weak label num", np.mean(totalTransferNumList_slab), np.sqrt(np.var(totalTransferNumList_slab)))
+			print("acc %.3f+/-%.3f"%(np.mean(totalAccList_slab), np.sqrt(np.var(totalAccList_slab))))
+			print("precision %.3f+/-%.3f"%(np.mean(totalPrecisionList_slab), np.sqrt(np.var(totalPrecisionList_slab))))
+			print("recall %.3f+/-%.3f"%(np.mean(totalRecallList_slab), np.sqrt(np.var(totalRecallList_slab))))
+			print("transfer weak label num %.3f+/-%.3f"%(np.mean(totalTransferNumList_slab), np.sqrt(np.var(totalTransferNumList_slab))))
 
 			"""weak clf"""
 
@@ -504,10 +545,10 @@ class active_learning:
 			print("TN", np.mean(totalTNList_weakClf), np.sqrt(np.var(totalTNList_weakClf)))
 			print("FN", np.mean(totalFNList_weakClf), np.sqrt(np.var(totalFNList_weakClf)))
 
-			print("acc", np.mean(totalAccList_weakClf), np.sqrt(np.var(totalAccList_weakClf)))
-			print("precision", np.mean(totalPrecisionList_weakClf), np.sqrt(np.var(totalPrecisionList_weakClf)))
-			print("recall", np.mean(totalRecallList_weakClf), np.sqrt(np.var(totalRecallList_weakClf)))
-			print("transfer weak label num", np.mean(totalTransferNumList_weakClf), np.sqrt(np.var(totalTransferNumList_weakClf)))
+			print("acc %.3f+/-%.3f"%(np.mean(totalAccList_weakClf), np.sqrt(np.var(totalAccList_weakClf))))
+			print("precision %.3f+/-%.3f"%(np.mean(totalPrecisionList_weakClf), np.sqrt(np.var(totalPrecisionList_weakClf))))
+			print("recall %.3f+/-%.3f"%(np.mean(totalRecallList_weakClf), np.sqrt(np.var(totalRecallList_weakClf))))
+			print("transfer weak label num  %.3f+/-%.3f"%(np.mean(totalTransferNumList_weakClf), np.sqrt(np.var(totalTransferNumList_weakClf))))
 
 def readTransferLabel(transferLabelFile):
 	f = open(transferLabelFile)
@@ -599,6 +640,30 @@ def readFeatureLabel(featureLabelFile):
 
 	return featureMatrix, labelList
 
+def readFeatureFile(featureFile, labelIndex):
+	f = open(featureFile)
+
+	featureMatrix = []
+	labelList = []
+
+	for rawLine in f:
+		line = rawLine.strip().split("\t")
+
+		lineLen = len(line)
+
+		featureSample = []
+		for lineIndex in range(lineLen):
+			featureVal = float(line[lineIndex])
+			featureSample.append(featureVal)
+		
+		labelList.append(labelIndex)
+
+		featureMatrix.append(featureSample)
+
+	f.close()
+
+	return featureMatrix, labelList
+
 def readSensorData():
 	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
 	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
@@ -633,6 +698,8 @@ if __name__ == "__main__":
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
+		print("feature dim", len(featureMatrix[0]))
+
 		transferLabelFile = "../../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
 		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 		transferLabelArray = np.array(transferLabelList)
@@ -644,7 +711,7 @@ if __name__ == "__main__":
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray,  transferLabelArray, auditorLabelArray, "sentiment_electronics", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray,  transferLabelArray, auditorLabelArray, "text", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
@@ -679,15 +746,18 @@ if __name__ == "__main__":
 	 	synthetic data
 	"""
 	if dataName == "simulation":
-		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+		featureLabelFile = "../../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
-		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
+		transferLabelFile0 = "../../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile0)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(trueLabelList)
+
+		transferLabelArray = np.array(transferLabelList)
+		auditorLabelArray = np.array(auditorLabelList)
 
 		initialExList = []
 		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
@@ -696,7 +766,43 @@ if __name__ == "__main__":
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray, "synthetic", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, auditorLabelArray, "synthetic", multipleClassFlag)
+
+		al.setInitialExList(initialExList)
+
+		al.run_CV()
+
+	if dataName == "20News":
+		featureFile = "../../../dataset/20News/baseball"
+		labelIndex = 0
+		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList0))
+
+		featureFile = "../../../dataset/20News/politicsMisc"
+		labelIndex = 1
+		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
+		print(len(labelList1))
+		
+		featureMatrix = featureMatrix0+featureMatrix1
+		labelList = labelList0+labelList1
+
+		transferLabelFile0 = "../../../dataset/20News/transferLabel_hockey_religionMisc--baseball_politicsMisc.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile0)
+
+		featureMatrix = np.array(featureMatrix)
+		labelArray = np.array(trueLabelList)
+
+		transferLabelArray = np.array(transferLabelList)
+		auditorLabelArray = np.array(auditorLabelList)
+
+		initialExList = []
+		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
+
+		fold = 10
+		rounds = 150
+
+		multipleClassFlag = False
+		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, auditorLabelArray, "text", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 

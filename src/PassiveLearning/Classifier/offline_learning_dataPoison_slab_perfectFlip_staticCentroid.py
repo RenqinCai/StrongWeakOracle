@@ -1,5 +1,5 @@
 """
-offline learning via considering weak labels as data poison and remove poisoned data to train a better classifier, compare distance of features via slab threshold
+offline learning via considering weak labels as data poison and remove poisoned data to train a better classifier, compare distance of features via slab threshold, randomly select instances to flip their labels. Centroids of both classes are not updated
 """
 
 import numpy as np
@@ -135,41 +135,143 @@ class active_learning:
 
 		return initList
 
-	def generateCleanData(self, train, slabThreshold):
+	def generateCleanData(self, train, slabThreshold, flipSamples_train):
 		sampledTrainNum = len(train)
 		cleanFeatureTrain = []
 		cleanLabelTrain = []
+
+		posExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+		negExpectedFeatureTrain = [0.0 for i in range(len(self.fn[0]))]
+
+		posLabelNum = 0.0
+		negLabelNum = 0.0
+
+		
+		flipLabelsTrain = flipSamples_train
+		# flipTrainNum = 150
+		# ### obtain sampled train instances
+		# flipLabelsTrain = random.sample(train, flipTrainNum)
+
+		for trainIndex in range(sampledTrainNum):
+			trainID = train[trainIndex]
+			feature = self.fn[trainID]
+
+			trueLabel = self.label[trainID]
+			transferLabel = self.transferLabel[trainID]
+
+			# if trainID in flipLabelsTrain:
+			# 	if trueLabel == 1:
+			# 		posExpectedFeatureTrain += feature
+			# 		posLabelNum += 1.0
+			# 	else:
+			# 		negExpectedFeatureTrain += feature
+			# 		negLabelNum += 1.0
+			# else:
+			if transferLabel == 1:
+				posExpectedFeatureTrain += feature
+				posLabelNum += 1.0
+			else:
+				negExpectedFeatureTrain += feature
+				negLabelNum += 1.0
+		"""
+		obtain expected feature for pos and neg classes
+		"""
+		# for trainIndex in range(sampledTrainNum):
+		# 	trainID = train[trainIndex]
+
+		# 	feature = self.fn[trainID]
+
+		# 	trueLabel = self.label[trainID]
+		# 	transferLabel = self.transferLabel[trainID]
+
+		# 	if trueLabel == 1:
+		# 		posExpectedFeatureTrain += feature
+		# 		posLabelNum += 1.0
+		# 	else:
+		# 		negExpectedFeatureTrain += feature
+		# 		negLabelNum += 1.0
+
+			# if transferLabel == 1:
+			# 	posExpectedFeatureTrain += feature
+			# 	posLabelNum += 1.0
+			# else:
+			# 	negExpectedFeatureTrain += feature
+			# 	negLabelNum += 1.0
+
+		posExpectedFeatureTrain /= posLabelNum
+		negExpectedFeatureTrain /= negLabelNum
+
+		### obtain threshold
+
+		slabDisThreshold = slabThreshold
+		sphereDisThreshold = 0.0
+
+		featureResidual = posExpectedFeatureTrain-negExpectedFeatureTrain
+
+		featureDisList = []
+
 		correctCleanNum = 0.0
 
-		poisonScoreList = []
 		### filter data
 		for trainIndex in range(sampledTrainNum):
 			trainID = train[trainIndex]
+
+			if trainID in flipLabelsTrain:
+				continue
+
 			featureTrain = self.fn[trainID]
 			transferLabel = self.transferLabel[trainID]
 			trueLabel = self.label[trainID]
 
-			predStrongLabel = self.m_weakTransferClf.predict(featureTrain.reshape(1, -1))[0]
-			if predStrongLabel == transferLabel:
+			featureDis = 0.0
+			if transferLabel == 1.0:
+				featureDis = featureTrain-posExpectedFeatureTrain
+
+			if transferLabel == 0.0:
+				featureDis = featureTrain-negExpectedFeatureTrain
+
+
+			featureDis = np.abs(np.dot(featureDis, featureResidual))
+			if featureDis < slabDisThreshold:
 				cleanFeatureTrain.append(self.fn[trainID])
 				cleanLabelTrain.append(transferLabel)
 
 				if transferLabel == trueLabel:
 					correctCleanNum += 1.0
 
-			# poisonScoreList.append(poisonScore)
+			featureDisList.append(featureDis)
 
 			# if transferLabel == trueLabel:
 			# 	cleanFeatureTrain.append(self.fn[trainID])
 			# 	cleanLabelTrain.append(transferLabel)
 		
 		# print("featureDisList", np.mean(featureDisList), np.median(featureDisList), np.sqrt(np.var(featureDisList)))
-		print(np.unique(cleanLabelTrain), cleanLabelTrain)
-		print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
+		# print("correctCleanNum", correctCleanNum, "cleanNum", len(cleanLabelTrain), correctCleanNum*1.0/len(cleanLabelTrain))
 		cleanFeatureTrain = np.array(cleanFeatureTrain)
 		cleanLabelTrain = np.array(cleanLabelTrain)
 
 		return cleanFeatureTrain, cleanLabelTrain
+
+	def generateFlipSamples(self, train):
+		# sampledTrainNum = len(train) 
+		# flipTrainNum = 150
+
+		# falseTransferTrain = []
+		# for trainIndex in range(sampledTrainNum):
+		# 	trainID = train[trainIndex]
+
+		# 	trueLabel = self.label[trainID]
+		# 	transferLabel = self.transferLabel[trainID]
+
+		# 	if trueLabel == transferLabel:
+		# 		continue
+		# 	else:
+		# 		falseTransferTrain.append(trainID)
+		# falseTransferTrain = np.array(falseTransferTrain)
+		# flipLabelsTrain = random.sample(falseTransferTrain, flipTrainNum)
+		flipLabelsTrain = [715, 1063, 1078, 192, 802, 1087, 613, 573, 294, 1762, 744, 317, 1621, 37, 1425, 1134, 1347, 100, 1110, 870, 1111, 1472, 1142, 1451, 1622, 1049, 64, 1319, 1248, 1741, 271, 600, 236, 1118, 602, 1412, 1173, 40, 1025, 582, 1388, 1536, 1498, 824, 1509, 330, 1481, 1203, 739, 481, 1394, 220, 612, 657, 216, 638, 1720, 1441, 1437, 1176, 1584, 1519, 506, 517, 1761, 888, 1383, 1513, 566, 66, 993, 1302, 14, 1197, 952, 310, 951, 1140, 128, 15, 432, 556, 1489, 242, 139, 463, 847, 1061, 336, 1011, 937, 368, 1631, 408, 166, 444, 577, 396, 1471, 750, 1362, 648, 401, 978, 559, 1058, 1384, 938, 95, 1065, 493, 1255, 1131, 363, 688, 1050, 467, 1344, 1330, 941, 475, 755, 488, 531, 1555, 1556, 973, 1238, 1032, 1530, 1177, 728, 240, 186, 1357, 262, 268, 1373, 1499, 18, 1076, 1525, 279, 411, 1356, 1041, 1516, 1560, 537, 121]
+
+		return flipLabelsTrain
 
 	def run_CV(self):
 
@@ -201,7 +303,6 @@ class active_learning:
 		# kf = KFold(totalInstanceNum, n_folds=self.fold, shuffle=True)
 		
 		slabThresholdList = np.arange(0.05, 0.3, 0.01)
-		slabThresholdList = [0.2]
 		for slabThreshold in slabThresholdList:
 			# print("*************************slabThreshold: %f****************"%slabThreshold)
 			cvIter = 0
@@ -225,7 +326,7 @@ class active_learning:
 				for postFoldIndex in range(foldIndex+1, foldNum):
 					train.extend(foldInstanceList[postFoldIndex])
 
-				# trainNum = int(totalInstanceNum*0.9)
+				trainNum = int(totalInstanceNum*0.9)
 				
 				# print(test)
 				fn_test = self.fn[test]
@@ -240,12 +341,15 @@ class active_learning:
 				label_train = self.label[train_sampled]
 				transferLabel_train = self.transferLabel[train_sampled]
 
-				self.m_weakTransferClf = LR(random_state=3)
-				self.m_weakTransferClf.fit(fn_train, transferLabel_train)
+				flipSamples_train = self.generateFlipSamples(train)
 
-				cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled, slabThreshold)
+				cleanFeatureTrain, cleanLabelTrain = self.generateCleanData(train_sampled, slabThreshold, flipSamples_train)
+
+				trainFeature = np.vstack((cleanFeatureTrain, self.fn[flipSamples_train]))
+				trainLabel = np.hstack((cleanLabelTrain, self.label[flipSamples_train]))
+
 				# print("clean data num", len(cleanLabelTrain))
-				self.m_clf.fit(cleanFeatureTrain, cleanLabelTrain)
+				self.m_clf.fit(trainFeature, trainLabel)
 
 				# print("data num", len(transferLabel_train))
 				# self.m_clf.fit(fn_train, transferLabel_train)
@@ -258,7 +362,6 @@ class active_learning:
 				acc = accuracy_score(label_test, label_preds)
 
 				totalAccList[cvIter] = acc
-				print("acc", acc)
 
 				cvIter += 1      
 			
@@ -375,30 +478,6 @@ def readFeatureLabel(featureLabelFile):
 
 	return featureMatrix, labelList
 
-def readFeatureFile(featureFile, labelIndex):
-	f = open(featureFile)
-
-	featureMatrix = []
-	labelList = []
-
-	for rawLine in f:
-		line = rawLine.strip().split("\t")
-
-		lineLen = len(line)
-
-		featureSample = []
-		for lineIndex in range(lineLen):
-			featureVal = float(line[lineIndex])
-			featureSample.append(featureVal)
-		
-		labelList.append(labelIndex)
-
-		featureMatrix.append(featureSample)
-
-	f.close()
-
-	return featureMatrix, labelList
-
 def readSensorData():
 	raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
 	tmp = np.genfromtxt('../../dataset/sensorType/rice_hour_sdh', delimiter=',')
@@ -413,7 +492,7 @@ def readSensorData():
 
 if __name__ == "__main__":
 
-	dataName = "20News"
+	dataName = "electronics"
 
 	modelName = "offline_"+dataName
 	timeStamp = datetime.now()
@@ -443,7 +522,7 @@ if __name__ == "__main__":
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray,  transferLabelArray, "text", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray,  transferLabelArray, "sentiment_electronics", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
@@ -478,19 +557,15 @@ if __name__ == "__main__":
 	 	synthetic data
 	"""
 	if dataName == "simulation":
-		featureLabelFile = "../../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
+		featureLabelFile = "../../dataset/synthetic/simulatedFeatureLabel_500_20_2.txt"
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
-		transferLabelFile = "../../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+		transferLabelFile0 = "../../dataset/synthetic/simulatedTransferLabel_500_20_2.txt"
+		auditorLabelList0, transferLabelList0, trueLabelList = readTransferLabel(transferLabelFile0)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(trueLabelList)
-		transferLabelArray = np.array(transferLabelList)
-
-		# print(transferLabelArray, np.sum(transferLabelArray), len(transferLabelArray))
-		print("correct transfer ratio", np.sum(auditorLabelList)*1.0/len(auditorLabelList))
 
 		initialExList = []
 		initialExList = [[42, 438, 9],  [246, 365, 299], [282, 329, 254], [114, 158, 255], [161, 389, 174], [283, 86, 90],  [75, 368, 403], [48, 481, 332], [356, 289, 176], [364, 437, 156]]
@@ -499,45 +574,8 @@ if __name__ == "__main__":
 		rounds = 150
 
 		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "synthetic", multipleClassFlag)
+		al = active_learning(fold, rounds, featureMatrix, labelArray, "synthetic", multipleClassFlag)
 
 		al.setInitialExList(initialExList)
 
 		al.run_CV()
-
-	if dataName == "20News":
-		featureFile = "../../../dataset/20News/baseball"
-		labelIndex = 0
-		featureMatrix0, labelList0 = readFeatureFile(featureFile, labelIndex)
-		print(len(labelList0))
-
-		featureFile = "../../../dataset/20News/politicsMisc"
-		labelIndex = 1
-		featureMatrix1, labelList1 = readFeatureFile(featureFile, labelIndex)
-		print(len(labelList1))
-		
-		featureMatrix = featureMatrix0+featureMatrix1
-		labelList = labelList0+labelList1
-
-		transferLabelFile0 = "../../../dataset/20News/transferLabel_hockey_religionMisc--baseball_politicsMisc.txt"
-		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile0)
-
-		featureMatrix = np.array(featureMatrix)
-		labelArray = np.array(trueLabelList)
-
-		transferLabelArray = np.array(transferLabelList)
-		auditorLabelArray = np.array(auditorLabelList)
-
-		initialExList = []
-		initialExList = [[42, 438, 9],  [246, 365, 299], [145, 77, 45], [353, 369, 299], [483, 337, 27], [489, 468, 122],  [360, 44, 412], [263, 284, 453], [449, 3, 261], [244, 200, 47]]
-
-		fold = 10
-		rounds = 150
-
-		multipleClassFlag = False
-		al = active_learning(fold, rounds, featureMatrix, labelArray, transferLabelArray, "text", multipleClassFlag)
-
-		al.setInitialExList(initialExList)
-
-		al.run_CV()
-

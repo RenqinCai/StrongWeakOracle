@@ -246,7 +246,7 @@ if __name__ == "__main__":
 	###processedKitchenElectronics electronics ---> kitchen
 
 	###processedBooksElectronics books ---> electronics
-	sourceFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+sourceDataName
+	sourceFeatureLabelFile = "../../../dataset/processed_acl/processedBooksKitchenElectronics/"+sourceDataName
 	sourceFeatureMatrix, sourceLabelList = readFeatureLabel(sourceFeatureLabelFile)
 
 	sourceLabel = np.array(sourceLabelList)
@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
 	print('class count of true source labels of all ex:\n', ct(sourceLabel))
 
-	targetFeatureLabelFile = "../../dataset/processed_acl/processedBooksElectronics/"+targetDataName
+	targetFeatureLabelFile = "../../../dataset/processed_acl/processedBooksKitchenElectronics/"+targetDataName
 	targetFeatureMatrix, targetLabelList = readFeatureLabel(targetFeatureLabelFile)
 
 	targetLabel = np.array(targetLabelList)
@@ -266,6 +266,6 @@ if __name__ == "__main__":
 	rounds = 100
 	al = active_learning(fold, rounds, sourceFeatureMatrix, sourceLabel, targetFeatureMatrix, targetLabel)
 
-	dataDir = "../../dataset/processed_acl/processedBooksElectronics/"
+	dataDir = "../../../dataset/processed_acl/processedBooksKitchenElectronics/"
 
 	al.run_CV(dataDir, "books", "electronics")

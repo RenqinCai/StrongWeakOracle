@@ -1,5 +1,5 @@
 """
-adv active learning offline for auditor by considering the predicted label
+we use two auditors to estimate reliability
 """
 from sklearn.decomposition import PCA
 import numpy as np

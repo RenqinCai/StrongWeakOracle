@@ -120,24 +120,51 @@ def saveVocab(saveDir, vocabObj, label):
 	f.close()
 
 def saveReview(saveDir, vocabObj, docList, label):
+	print("***************label", label)
 	reviewFileName = os.path.join(saveDir, label)
 	f = open(reviewFileName, "w")
+	docNum = len(docList)
+	print("docNum", docNum)
 
-	print("docNum", len(docList))
+	newDocList = []
 
 	for docObj in docList:
 		docObj.m_wordList = [0.0 for i in range(vocabObj.m_vocSize)]
 		for wordStr in docObj.m_wordMap:
 			wordTF = docObj.m_wordMap[wordStr]
+			
 			if wordStr in vocabObj.m_word2IDMap:
 				wordIndex = vocabObj.m_word2IDMap[wordStr]
-				docObj.m_wordList[wordIndex] = wordTF
+				if wordTF == 0.0:
+					print("error")
+					docObj.m_wordList[wordIndex] = 0.0
+				else:
+					docObj.m_wordList[wordIndex] = wordTF
+					# docObj.m_wordList[wordIndex] = (1.0+np.log(wordTF))
+		# if sum(docObj.m_wordList) == 0.0:
+		# 	continue
+	# 	newDocList.append(docObj)
 
-	wordNum = vocabObj.m_vocSize
-	for docObj in docList:
+	# newDocNum = len(newDocList)
+	# print("removing empty doc after preprocessing", newDocNum)
+	# wordNum = vocabObj.m_vocSize
+
+	# for docObj in newDocList:
+	# 	for wordIndex in range(wordNum):
+	# 		wordStr = vocabObj.m_ID2wordMap[wordIndex]
+	# 		DF = vocabObj.m_wordDFMap[wordStr]
+	# 		DF = np.log(newDocNum*1.0/DF)
+
+	# 		wordTF = docObj.m_wordList[wordIndex]
+	# 		wordTFIDF = DF*wordTF
+	# 		docObj.m_wordList[wordIndex] = wordTFIDF
+
+	
+	for docObj in newDocList:
 		# if docObj.m_label != label:
 		# 	continue
 		for wordIndex in range(wordNum):
+
 			f.write(str(docObj.m_wordList[wordIndex])+"\t")
 
 		if docObj.m_posNeg == True:
