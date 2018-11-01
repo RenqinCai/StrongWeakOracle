@@ -166,6 +166,8 @@ class _ActiveClf:
 		selectedID = sortedUnlabeledIdList[0]
 		score4SelectedID = unlabeledIdScoreMap[selectedID]
 
+		print(score4SelectedID, selectedID, "label", corpusObj.m_label[selectedID], "transferLabel", corpusObj.m_transferLabel[selectedID])
+		
 		return selectedID
 
 	def getClassifierMargin(self, corpusObj, unlabeledId):
@@ -437,7 +439,7 @@ class _ActiveClf:
 		while strongLabelNumIter < self.m_strongLabelNumThresh:
 			# print("random a number", random.random())
 			# print("numpy random a number", np.random.random())
-			# print("strongLabelNumIter", strongLabelNumIter)
+			print("strongLabelNumIter", strongLabelNumIter)
 
 			idx = self.select_example(corpusObj) 
 			# print(strongLabelNumIter, "idx", idx)
@@ -482,14 +484,14 @@ class _ActiveClf:
 	
 def loadData(corpusObj, dataName):
 	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/transferLabel_books--electronics.txt"
 		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 		transferLabelArray = np.array(transferLabelList)
 		auditorLabelArray = np.array(auditorLabelList)
@@ -498,6 +500,28 @@ def loadData(corpusObj, dataName):
 		initialExList = [[397, 1942, 200], [100, 1978, 657], [902, 788, 1370], [1688, 1676, 873], [1562, 1299, 617], [986, 1376, 562], [818, 501, 1922], [600, 1828, 1622], [1653, 920, 1606], [39, 1501, 166]]
 
 		corpusObj.initCorpus(featureMatrix, labelArray, transferLabelArray, auditorLabelArray, initialExList, "text", multipleClassFlag)
+
+	if dataName == "sensorTypes":
+		raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
+		fn = get_name_features(raw_pt)
+
+		featureMatrix = fn
+
+		featureMatrix = np.array(featureMatrix)
+		# labelArray = np.array(labelList)
+
+		transferLabelFile = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+
+		auditorLabelArray = np.array(auditorLabelList)
+		transferLabelArray = np.array(transferLabelList)
+		labelArray = np.array(trueLabelList)
+
+		multipleClassFlag = True
+		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
+
+		corpusObj.initCorpus(featureMatrix, labelArray, transferLabelArray, auditorLabelArray, initialExList, "sensor", multipleClassFlag)
+
 
 def CVALParaWrapper(args):
 	return CVALPerFold(*args)
@@ -584,11 +608,11 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 		argsList[poolIndex].append(train)
 		argsList[poolIndex].append(test)
 
-	poolObj = Pool(poolNum)
-	results = poolObj.map(CVALParaWrapper, argsList)
-	poolObj.close()
-	poolObj.join()
-	# results = map(CVALParaWrapper, argsList)
+	# poolObj = Pool(poolNum)
+	# results = poolObj.map(CVALParaWrapper, argsList)
+	# poolObj.close()
+	# poolObj.join()
+	results = map(CVALParaWrapper, argsList)
 
 	for poolIndex in range(poolNum):
 		foldIndex = poolIndex
@@ -639,6 +663,8 @@ if __name__ == '__main__':
 
 	corpusObj = _Corpus()
 	dataName = "electronics"
+	# loadData(corpusObj, dataName)
+	# dataName = "sensorTypes"
 	loadData(corpusObj, dataName)
 
 

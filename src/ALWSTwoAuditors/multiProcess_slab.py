@@ -139,7 +139,7 @@ class _ActiveClf:
 
 		self.m_negAuditor = LR(random_state=3)
 
-		self.m_slabThreshold = 0.73
+		self.m_slabThreshold = 0.22
 
 	def select_example(self, corpusObj):
 
@@ -370,6 +370,8 @@ class _ActiveClf:
 		posLabelNum = 0.0
 		negLabelNum = 0.0
 		sampledTrainNum = len(self.m_train)
+
+		print(len(corpusObj.m_feature), len(corpusObj.m_label))
 		"""
 		obtain expected feature for pos and neg classes
 		"""
@@ -394,6 +396,7 @@ class _ActiveClf:
 				negExpectedFeatureTrain += featureTrain
 				negLabelNum += 1.0
 
+		print("posLabelNum", posLabelNum)
 		posExpectedFeatureTrain /= posLabelNum
 		negExpectedFeatureTrain /= negLabelNum
 
@@ -478,14 +481,14 @@ class _ActiveClf:
 	
 def loadData(corpusObj, dataName):
 	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/transferLabel_books--electronics.txt"
 		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 		transferLabelArray = np.array(transferLabelList)
 		auditorLabelArray = np.array(auditorLabelList)
@@ -495,11 +498,33 @@ def loadData(corpusObj, dataName):
 
 		corpusObj.initCorpus(featureMatrix, labelArray, transferLabelArray, auditorLabelArray, initialExList, "text", multipleClassFlag)
 
+	if dataName == "sensorTypes":
+		raw_pt = [i.strip().split('\\')[-1][:-5] for i in open('../../dataset/sensorType/sdh_soda_rice/rice_names').readlines()]
+		fn = get_name_features(raw_pt)
+
+		featureMatrix = fn
+
+		featureMatrix = np.array(featureMatrix)
+		# labelArray = np.array(labelList)
+
+		transferLabelFile = "../../dataset/sensorType/sdh_soda_rice/transferLabel_sdh--rice.txt"
+		auditorLabelList, transferLabelList, trueLabelList = readTransferLabel(transferLabelFile)
+
+		auditorLabelArray = np.array(auditorLabelList)
+		transferLabelArray = np.array(transferLabelList)
+		labelArray = np.array(trueLabelList)
+
+		multipleClassFlag = True
+		initialExList = [[470, 352, 217],  [203, 280, 54], [267, 16, 190], [130, 8, 318], [290, 96, 418], [252, 447, 55],  [429, 243, 416], [240, 13, 68], [115, 449, 226], [262, 127, 381]]
+
+		corpusObj.initCorpus(featureMatrix, labelArray, transferLabelArray, auditorLabelArray, initialExList, "sensor", multipleClassFlag)
+
+
 def CVALParaWrapper(args):
 	return CVALPerFold(*args)
 
 def CVALPerFold(corpusObj, initialSampleList, train, test):
-	StrongLabelNumThreshold = 150
+	StrongLabelNumThreshold = 10
 
 	random.seed(10)
 	np.random.seed(10)
@@ -555,8 +580,6 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 	totalSampleNum4PosAuditorList = [[] for i in range(foldNum)]
 	totalSampleNum4NegAuditorList = [[] for i in range(foldNum)]
 
-
-
 	poolNum = 10
 
 	results = []
@@ -580,11 +603,11 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 		argsList[poolIndex].append(train)
 		argsList[poolIndex].append(test)
 
-	poolObj = Pool(poolNum)
-	results = poolObj.map(CVALParaWrapper, argsList)
-	poolObj.close()
-	poolObj.join()
-	# results = map(CVALParaWrapper, argsList)
+	# poolObj = Pool(poolNum)
+	# results = poolObj.map(CVALParaWrapper, argsList)
+	# poolObj.close()
+	# poolObj.join()
+	results = map(CVALParaWrapper, argsList)
 
 	for poolIndex in range(poolNum):
 		foldIndex = poolIndex
@@ -600,26 +623,6 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 
 		totalWeakLabelNumList[foldIndex] = resultFold[6]
 
-		# print(len(accList))
-		# print(accList)
-
-	# for foldIndex in range(foldNum):
-	# 	train = []
-	# 	for preFoldIndex in range(foldIndex):
-	# 		train.extend(foldSampleList[preFoldIndex])
-
-	# 	test = foldSampleList[foldIndex]
-	# 	for postFoldIndex in range(foldIndex+1, foldNum):
-	# 		train.extend(foldSampleList[postFoldIndex])
-
-	# 	initialSampleList = corpusObj.m_initialExList[foldIndex]
-
-	# 	alObj = _ActiveClf(corpusObj.m_category, corpusObj.m_multipleClass, StrongLabelNumThreshold)
-	# 	alObj.initActiveClf(initialSampleList, train, test)
-	# 	alObj.activeTrainClf(corpusObj)
-
-		# totalAccList[foldIndex] = alObj.m_accList
-
 	writeFile(outputSrc, modelVersion, totalAccList, "acc")
 	writeFile(outputSrc, modelVersion, totalWeakLabelAccList, "weakLabelAcc")
 	writeFile(outputSrc, modelVersion, totalWeakLabelPrecisionList, "weakLabelPrecision")
@@ -634,7 +637,8 @@ if __name__ == '__main__':
 	timeStart = datetime.now()
 
 	corpusObj = _Corpus()
-	dataName = "electronics"
+	# dataName = "electronics"
+	dataName = "sensorTypes"
 	loadData(corpusObj, dataName)
 
 

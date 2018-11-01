@@ -256,6 +256,7 @@ class _ActiveClf:
 						FN += 1.0
 					else:
 						TN += 1.0
+
 		precision = TP/(TP+FP)
 		recall = TP/(TP+FN)
 		acc = (TP+TN)/(TP+FP+TN+FN)
@@ -267,7 +268,6 @@ class _ActiveClf:
 		self.m_weakLabelPrecisionList.append(precision)
 		self.m_weakLabelRecallList.append(recall)
 		self.m_weakLabelAccList.append(acc)
-
 
 		return cleanFeatureTrain, cleanLabelTrain
 
@@ -414,14 +414,14 @@ class _ActiveClf:
 	
 def loadData(corpusObj, dataName):
 	if dataName == "electronics":
-		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/"+dataName
+		featureLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/"+dataName
 
 		featureMatrix, labelList = readFeatureLabel(featureLabelFile)
 
 		featureMatrix = np.array(featureMatrix)
 		labelArray = np.array(labelList)
 
-		transferLabelFile = "../../dataset/processed_acl/processedBooksElectronics/transferLabel_books--electronics.txt"
+		transferLabelFile = "../../dataset/processed_acl/processedBooksKitchenElectronics/TF/transferLabel_books--electronics.txt"
 		auditorLabelList, transferLabelList, targetLabelList = readTransferLabel(transferLabelFile)
 		transferLabelArray = np.array(transferLabelList)
 		auditorLabelArray = np.array(auditorLabelList)
@@ -458,6 +458,7 @@ def CVALPerFold(corpusObj, initialSampleList, train, test):
 	resultPerFold.append(alObj.m_weakLabelPrecisionList)
 	resultPerFold.append(alObj.m_weakLabelRecallList)
 	resultPerFold.append(alObj.m_weakLabelNumList)
+	resultPerFold.append(alObj.m_labeledIDList)
 	# resultPerFold = copy.deepcopy(alObj.m_accList)
 	# resultPerFold = 0
 	return resultPerFold
@@ -530,7 +531,7 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 	totalSampleNum4PosAuditorList = [[] for i in range(foldNum)]
 	totalSampleNum4NegAuditorList = [[] for i in range(foldNum)]
 
-
+	totalLabeledIDList = [[] for i in range(foldNum)]
 
 	poolNum = 10
 
@@ -574,7 +575,7 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 		totalWeakLabelRecallList[foldIndex] = resultFold[5]
 
 		totalWeakLabelNumList[foldIndex] = resultFold[6]
-
+		totalLabeledIDList[foldIndex] = resultFold[7]
 		# print(len(accList))
 		# print(accList)
 
@@ -602,7 +603,7 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 	writeFile(outputSrc, modelVersion, totalWeakLabelNumList, "weakLabelNum")
 	writeFile(outputSrc, modelVersion, totalSampleNum4PosAuditorList, "sampleNum4PosAuditor")
 	writeFile(outputSrc, modelVersion, totalSampleNum4NegAuditorList, "sampleNum4NegAuditor")
-
+	writeFile(outputSrc, modelVersion, totalLabeledIDList, "labeledSample")
 
 if __name__ == '__main__':
 	

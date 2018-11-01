@@ -1,5 +1,5 @@
 """
-active learning with a strong oracle and weak labels are given. use theta_{weak} Weaklabels as auditor
+active learning with a strong oracle and weak labels are given. train a linear auditor.
 """
 
 import numpy as np
@@ -106,6 +106,10 @@ class _ActiveClf:
 		self.m_multipleClass = multipleClass
 
 		self.m_category = category
+
+		self.m_auditor = None
+
+		self.m_auditorSampleTrain = []
 		
 		self.m_posAuditor = None
 
@@ -122,9 +126,8 @@ class _ActiveClf:
 		self.m_weakLabelAccList = []
 
 		self.m_weakLabelNumList = []
-		self.m_weakClassList = []
 
-		self.m_cleanStrategy = "weakClf"
+		self.m_cleanStrategy = "oneLinearAuditor"
 
 	def initActiveClf(self, initialSampleList, train, test):
 		self.m_initialExList = initialSampleList
@@ -140,13 +143,15 @@ class _ActiveClf:
 
 		self.m_negAuditor = LR(random_state=3)
 
+		self.m_auditor = LR(random_state=3)
+
 		self.m_slabThreshold = 0.22
 
 	def select_example(self, corpusObj):
 
-		selectedID = random.sample(self.m_unlabeledIDList, 1)[0]
-		# print("selectedID", selectedID)
-		return selectedID
+		# selectedID = random.sample(self.m_unlabeledIDList, 1)[0]
+		# # print("selectedID", selectedID)
+		# return selectedID
 
 		unlabeledIdScoreMap = {}
 		unlabeledIdNum = len(self.m_unlabeledIDList)
@@ -203,20 +208,7 @@ class _ActiveClf:
 		TN = 0.0
 		FN = 0.0
 
-		probThreshold = 0.8
-
-
-		predictProbTrain = self.m_activeClf.predict_proba(corpusObj.m_feature[self.m_train])
-
-		f = np.sum(predictProbTrain, axis=0)
-
-		predictProbTrainSquare = np.square(predictProbTrain)
-
-		predictProbTrainSquareNormalized = predictProbTrainSquare / f
-
-		predictProbTrainSquareNormalizedSum = np.sum(predictProbTrainSquareNormalized, axis=1).reshape(-1, 1)
-
-		predictProbTrainSquareNormalized = predictProbTrainSquareNormalized/predictProbTrainSquareNormalizedSum
+		probThreshold = 0.5
 
 		for trainIndex in range(sampledTrainNum):
 			trainID = self.m_train[trainIndex]
@@ -273,42 +265,11 @@ class _ActiveClf:
 							TN += 1.0
 
 			else:
-				# sampledLabel = np.random.choice(self.m_weakClassList, 1, p=predictProbTrainSquareNormalized[trainIndex])[0]
-				# print("sampledLabel", sampledLabel, transferLabel)
-				# if sampledLabel == transferLabel:
-				# 	cleanFeatureTrain.append(featureTrain)
-				# 	cleanLabelTrain.append(transferLabel)
 
-				try:
-					transferLabelIndex = self.m_weakClassList.index(transferLabel)
-					if predictProbTrainSquareNormalized[trainIndex][transferLabelIndex] > 0.95:
-						cleanFeatureTrain.append(featureTrain)
-						cleanLabelTrain.append(transferLabel)
-				except ValueError as e:
-					print("miss")
-				# print("********", trainIndex)
-				# print(predictProbTrainSquareNormalized[trainIndex])
-				# print(predictProbTrain[trainIndex])
-
-				# weakPredictLabelProb = self.m_activeClf.predict_proba(featureTrain.reshape(1, -1))[0]
-				# # print(weakPredictLabelProb, sum(weakPredictLabelProb), self.m_weakClassList, transferLabel)
-				# # print("predlabel", self.m_activeClf.predict(featureTrain.reshape(1, -1)))
-				# # weakPredictLabelList = list(self.m_activeClf.predict(featureTrain.reshape(1, -1)))
-
-				# # print("weakPredictLabelList", weakPredictLabelList)
-				# transferLabelIndex = -1
-				# try:
-				# 	transferLabelIndex = self.m_weakClassList.index(transferLabel)
-				# 	# print("transferLabelIndex", transferLabelIndex)
-				# 	if weakPredictLabelProb[transferLabelIndex] > 0.95:
-				# 	# print("weakPredictLabel", weakPredictLabel)
-				# 	# if weakPredictLabel > 0.7:
-				# 	# if weakPredictLabel == transferLabel:
-				# 		cleanFeatureTrain.append(featureTrain)
-				# 		cleanLabelTrain.append(transferLabel)
-				# except ValueError as e:
-				# 	print("miss")
-					# print("miss")
+				weakPredictLabel = self.m_activeClf.predict(featureTrain.reshape(1, -1))[0]
+				if weakPredictLabel == transferLabel:
+					cleanFeatureTrain.append(featureTrain)
+					cleanLabelTrain.append(transferLabel)
 				# print("weakPredictLabel", weakPredictLabel)
 					# print(self.m_activeClf.predict_proba(featureTrain.reshape(1, -1)))
 				# if self.m_activeClf.predict_proba(featureTrain.reshape(1, -1))[0][1] >= probThreshold:
@@ -385,31 +346,61 @@ class _ActiveClf:
 
 		return cleanFeatureTrain, cleanLabelTrain	
 
-	def getOverfitDegree(self, corpusObj):
+	def generateCleanDataByOneAuditor(self, corpusObj):
 		sampledTrainNum = len(self.m_train)
 
-		transferLabelMap = {}
-		trueLabelMap = {}
+		cleanFeatureTrain = []
+		cleanLabelTrain = []
 
+		TP = 0.0
+		FP = 0.0
+		TN = 0.0
+		FN = 0.0
+
+		probThreshold = 0.5
 
 		for trainIndex in range(sampledTrainNum):
 			trainID = self.m_train[trainIndex]
+
+			if trainID in self.m_labeledIDList:
+				continue
+
+			featureTrain = corpusObj.m_feature[trainID]
 			transferLabel = corpusObj.m_transferLabel[trainID]
 			trueLabel = corpusObj.m_label[trainID]
 
-			if transferLabel not in transferLabelMap:
-				transferLabelMap[transferLabel] = 0.0
-			transferLabelMap[transferLabel] += 1.0
+			predictAuditorPosProb = 0.0
+			try:
+				predictAuditorPosProb = self.m_auditor.predict_proba(featureTrain.reshape(1, -1))[0][1]
+			except NotFittedError as e:
+				predictAuditorPosProb = random.random()
 
-			if trueLabel not in trueLabelMap:
-				trueLabelMap[trueLabel] = 0.0
-			trueLabelMap[trueLabel] += 1.0
+			if predictAuditorPosProb > 0.8:
+				cleanFeatureTrain.append(featureTrain)
+				cleanLabelTrain.append(transferLabel)
 
-		for label in transferLabelMap:
-			print(label, "----- true num", trueLabelMap[label], ": transfer num", transferLabelMap[label])
+				# print("weakPredictLabel", weakPredictLabel)
+					# print(self.m_activeClf.predict_proba(featureTrain.reshape(1, -1)))
+				# if self.m_activeClf.predict_proba(featureTrain.reshape(1, -1))[0][1] >= probThreshold:
+					# predictAuditorLabel = 1.0
 
-		print(trueLabelMap)
-		print("*******************")
+		# precision = TP/(TP+FP)
+		# recall = TP/(TP+FN)
+		# acc = (TP+TN)/(TP+FP+TN+FN)
+
+		precision = 0.0
+		recall = 0.0
+		acc = 0.0
+
+		self.m_weakLabelNumList.append(len(cleanLabelTrain))
+		cleanFeatureTrain = np.array(cleanFeatureTrain)
+		cleanLabelTrain = np.array(cleanLabelTrain)
+
+		self.m_weakLabelPrecisionList.append(precision)
+		self.m_weakLabelRecallList.append(recall)
+		self.m_weakLabelAccList.append(acc)
+
+		return cleanFeatureTrain, cleanLabelTrain
 
 	def updateTwoLRAuditor(self, corpusObj, idx, trueLabel, transferLabel):
 		if transferLabel == 1.0:
@@ -426,88 +417,96 @@ class _ActiveClf:
 		self.m_posAuditorSampleNumList.append(len(self.m_posAuditorSampleTrain))
 		self.m_negAuditorSampleNumList.append(len(self.m_negAuditorSampleTrain))
 
+	def updateOneLRAuditor(self, corpusObj, idx):
+		self.m_auditorSampleTrain.append(idx)
+
+		if len(set(corpusObj.m_auditorLabel[self.m_auditorSampleTrain])) > 1:
+			self.m_auditor.fit(corpusObj.m_feature[self.m_auditorSampleTrain], corpusObj.m_auditorLabel[self.m_auditorSampleTrain])
+
+
 	def activeTrainClf(self, corpusObj):
 		
-		self.getOverfitDegree(corpusObj)
-
-		# label_init = corpusObj.m_label[self.m_initialExList]
-		# print("initExList\t", self.m_initialExList, label_init)
-		# strongLabelNumIter = 3
+		label_init = corpusObj.m_label[self.m_initialExList]
+		print("initExList\t", self.m_initialExList, label_init)
+		strongLabelNumIter = 3
 		
-		# self.m_labeledIDList.extend(self.m_initialExList)
-		# self.m_unlabeledIDList = list(set(self.m_train)-set(self.m_labeledIDList))
+		self.m_labeledIDList.extend(self.m_initialExList)
+		self.m_unlabeledIDList = list(set(self.m_train)-set(self.m_labeledIDList))
 
-		# feature_train_iter = []
-		# label_train_iter = []
+		feature_train_iter = []
+		label_train_iter = []
 
-		# feature_train_iter = corpusObj.m_feature[self.m_labeledIDList]
-		# label_train_iter = corpusObj.m_label[self.m_labeledIDList]
+		feature_train_iter = corpusObj.m_feature[self.m_labeledIDList]
+		label_train_iter = corpusObj.m_label[self.m_labeledIDList]
 
-		# feature_train_iter = np.vstack((corpusObj.m_feature[self.m_unlabeledIDList], corpusObj.m_feature[self.m_labeledIDList]))
-		# label_train_iter = np.hstack((corpusObj.m_transferLabel[self.m_unlabeledIDList], corpusObj.m_label[self.m_labeledIDList]))
-		# self.m_activeClf.fit(feature_train_iter, label_train_iter)
+		feature_train_iter = np.vstack((corpusObj.m_feature[self.m_unlabeledIDList], corpusObj.m_feature[self.m_labeledIDList]))
+		label_train_iter = np.hstack((corpusObj.m_transferLabel[self.m_unlabeledIDList], corpusObj.m_label[self.m_labeledIDList]))
+		self.m_activeClf.fit(feature_train_iter, label_train_iter)
 
-		# accList = []
-		# weakLabelACCList = []
-		# weakLabelPrecisionList = []
-		# weakLabelRecallList = []
+		accList = []
+		weakLabelACCList = []
+		weakLabelPrecisionList = []
+		weakLabelRecallList = []
 
-		# # for idx in self.m_initialExList:
-		# # 	feature = corpusObj.m_feature[idx]
-		# # 	trueLabel = corpusObj.m_label[idx]
-		# # 	transferLabel = corpusObj.m_transferLabel[idx]
+		for idx in self.m_initialExList:
+			feature = corpusObj.m_feature[idx]
+			trueLabel = corpusObj.m_label[idx]
+			transferLabel = corpusObj.m_transferLabel[idx]
 
-		# 	# self.updateTwoLRAuditor(corpusObj, idx, trueLabel, transferLabel)
-		# self.m_weakClassList= sorted(list(set(label_train_iter)))
-		# print("strong label num threshold", self.m_strongLabelNumThresh)
+			self.updateOneLRAuditor(corpusObj, idx)
 
-		# while strongLabelNumIter < self.m_strongLabelNumThresh:
-		# 	# print("random a number", random.random())
-		# 	# print("numpy random a number", np.random.random())
-		# 	# print("strongLabelNumIter", strongLabelNumIter)
+		print("strong label num threshold", self.m_strongLabelNumThresh)
 
-		# 	idx = self.select_example(corpusObj) 
-		# 	# print(strongLabelNumIter, "idx", idx)
-		# 	self.m_labeledIDList.append(idx)
-		# 	self.m_unlabeledIDList.remove(idx)
+		while strongLabelNumIter < self.m_strongLabelNumThresh:
+			# print("random a number", random.random())
+			# print("numpy random a number", np.random.random())
+			# print("strongLabelNumIter", strongLabelNumIter)
+
+			idx = self.select_example(corpusObj) 
+			# print(strongLabelNumIter, "idx", idx)
+			self.m_labeledIDList.append(idx)
+			self.m_unlabeledIDList.remove(idx)
 			
-		# 	cleanFeatureTrain = None
-		# 	cleanLabelTrain = None
+			cleanFeatureTrain = None
+			cleanLabelTrain = None
 
-		# 	feature = corpusObj.m_feature[idx]
-		# 	trueLabel = corpusObj.m_label[idx]
-		# 	transferLabel = corpusObj.m_transferLabel[idx]
+			feature = corpusObj.m_feature[idx]
+			trueLabel = corpusObj.m_label[idx]
+			transferLabel = corpusObj.m_transferLabel[idx]
 
-		# 	# self.updateTwoLRAuditor(corpusObj, idx, trueLabel, transferLabel)
+			self.updateOneLRAuditor(corpusObj, idx)
 
-		# 	# if self.m_category == "synthetic":
-		# 	# 	cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySphere(train, slabThreshold)
+			# if self.m_category == "synthetic":
+			# 	cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySphere(train, slabThreshold)
 				
-		# 	if self.m_cleanStrategy == "slab":
-		# 		cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySlab(corpusObj, self.m_slabThreshold, posExpectedFeatureTrain/posLabelNum, negExpectedFeatureTrain/negLabelNum)
+			if self.m_cleanStrategy == "slab":
+				cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataBySlab(corpusObj, self.m_slabThreshold, posExpectedFeatureTrain/posLabelNum, negExpectedFeatureTrain/negLabelNum)
 
-		# 	if self.m_cleanStrategy == "weakClf":
-		# 		cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataByWeakClf(corpusObj)
+			if self.m_cleanStrategy == "weakClf":
+				cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataByWeakClf(corpusObj)
 
-		# 	# print("corpusObj.m_feature[self.m_labeledIDList]", corpusObj.m_feature[self.m_labeledIDList].shape)
-		# 	# print(cleanFeatureTrain.shape)
-		# 	if len(cleanFeatureTrain) > 0:
-		# 		feature_train_iter = np.vstack((cleanFeatureTrain, corpusObj.m_feature[self.m_labeledIDList]))
-		# 		label_train_iter = np.hstack((cleanLabelTrain, corpusObj.m_label[self.m_labeledIDList]))
-		# 	else:
-		# 		feature_train_iter = corpusObj.m_feature[self.m_labeledIDList]
-		# 		label_train_iter = corpusObj.m_label[self.m_labeledIDList]
-		# 	# print("clean data num", len(cleanLabelTrain))
-		# 	self.m_activeClf.fit(feature_train_iter, label_train_iter)
+			if self.m_cleanStrategy == "oneLinearAuditor":
+				cleanFeatureTrain, cleanLabelTrain = self.generateCleanDataByOneAuditor(corpusObj)
 
-		# 	self.m_weakClassList= sorted(list(set(label_train_iter)))
+			# print("corpusObj.m_feature[self.m_labeledIDList]", corpusObj.m_feature[self.m_labeledIDList].shape)
+			# print(cleanFeatureTrain.shape)
+			if len(cleanFeatureTrain) > 0:
 
-		# 	predLabelTest = self.m_activeClf.predict(corpusObj.m_feature[self.m_test])
 
-		# 	acc = accuracy_score(corpusObj.m_label[self.m_test], predLabelTest)
-		# 	# print("acc", acc)
-		# 	self.m_accList.append(acc)
-		# 	strongLabelNumIter += 1
+				feature_train_iter = np.vstack((cleanFeatureTrain, corpusObj.m_feature[self.m_labeledIDList]))
+				label_train_iter = np.hstack((cleanLabelTrain, corpusObj.m_label[self.m_labeledIDList]))
+			else:
+				feature_train_iter = corpusObj.m_feature[self.m_labeledIDList]
+				label_train_iter = corpusObj.m_label[self.m_labeledIDList]
+			# print("clean data num", len(cleanLabelTrain))
+			self.m_activeClf.fit(feature_train_iter, label_train_iter)
+
+			predLabelTest = self.m_activeClf.predict(corpusObj.m_feature[self.m_test])
+
+			acc = accuracy_score(corpusObj.m_label[self.m_test], predLabelTest)
+			# print("acc", acc)
+			self.m_accList.append(acc)
+			strongLabelNumIter += 1
 	
 def loadData(corpusObj, dataName):
 	if dataName == "electronics":
@@ -633,11 +632,11 @@ def parallelCVAL(corpusObj, outputSrc, modelVersion):
 		argsList[poolIndex].append(train)
 		argsList[poolIndex].append(test)
 
-	# poolObj = Pool(poolNum)
-	# results = poolObj.map(CVALParaWrapper, argsList)
-	# poolObj.close()
-	# poolObj.join()
-	results = map(CVALParaWrapper, argsList)
+	poolObj = Pool(poolNum)
+	results = poolObj.map(CVALParaWrapper, argsList)
+	poolObj.close()
+	poolObj.join()
+	# results = map(CVALParaWrapper, argsList)
 
 	for poolIndex in range(poolNum):
 		foldIndex = poolIndex
@@ -693,7 +692,7 @@ if __name__ == '__main__':
 	loadData(corpusObj, dataName)
 
 
-	modelName = "weakClfAuditor_random_"+dataName
+	modelName = "oneLinearAuditor_"+dataName
 	timeStamp = datetime.now()
 	timeStamp = str(timeStamp.month)+str(timeStamp.day)+str(timeStamp.hour)+str(timeStamp.minute)
 	modelVersion = modelName+"_"+timeStamp
